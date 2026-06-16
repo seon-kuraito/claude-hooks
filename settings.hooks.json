@@ -1,4 +1,26 @@
 {
   "_comment": "Declared hook registrations for ~/.claude/settings.json. This file is the source of truth for HOW each hook in hooks/ should be registered; apply entries to the live settings.json manually (a check script may automate the comparison later). Command paths use ~/.claude/hooks/<hook-name>/hook.sh, which resolves into this repo via the per-hook symlinks created by scripts/link-hook.sh.",
-  "hooks": {}
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/ultra-attention-reminder/hook.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/ultra-attention-reminder/hook.sh"
+          }
+        ]
+      }
+    ]
+  }
 }
