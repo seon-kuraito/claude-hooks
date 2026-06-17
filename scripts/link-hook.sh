@@ -27,22 +27,26 @@ if [ ! -d "$src" ]; then
   exit 1
 fi
 
-# Already linked to the right place → nothing to do.
+# Link if needed; converge to the post-link step in every non-error case.
 if [ -L "$dest" ]; then
   if [ "$(readlink "$dest")" = "$src" ]; then
     echo "ok: already linked — $name"
-    exit 0
+  else
+    echo "error: $dest already links elsewhere ($(readlink "$dest"))" >&2
+    exit 1
   fi
-  echo "error: $dest already links elsewhere ($(readlink "$dest"))" >&2
-  exit 1
-fi
-
-# A real file/dir is in the way → refuse to clobber it.
-if [ -e "$dest" ]; then
+elif [ -e "$dest" ]; then
+  # A real file/dir is in the way → refuse to clobber it.
   echo "error: $dest exists and is not a symlink — refusing to overwrite" >&2
   exit 1
+else
+  mkdir -p "$runtime_hooks"
+  ln -s "$src" "$dest"
+  echo "linked: $dest -> $src"
 fi
 
-mkdir -p "$runtime_hooks"
-ln -s "$src" "$dest"
-echo "linked: $dest -> $src"
+# Run the hook's own post-link setup if it ships one (idempotent: build
+# artifacts, check registration, etc.). Keeps link-hook.sh hook-agnostic.
+if [ -x "$src/install.sh" ]; then
+  "$src/install.sh"
+fi

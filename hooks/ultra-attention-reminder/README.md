@@ -25,10 +25,10 @@
 首次安裝執行：
 
 ```sh
-hooks/ultra-attention-reminder/install.sh
+scripts/link-hook.sh ultra-attention-reminder
 ```
 
-它會：連結 hook 進 `~/.claude/hooks/`、（`Reminder.app` 的執行檔不存在時）建置它、並檢查 `~/.claude/settings.json` 是否已註冊。可重複執行。
+它會：連結 hook 進 `~/.claude/hooks/`，並（因本 hook 帶 `install.sh`，連結後自動執行）在 `Reminder.app` 執行檔不存在時建置它、檢查 `~/.claude/settings.json` 是否已註冊。可重複執行。
 
 - 註冊本身仍手動（declare-and-compare，見 `settings.hooks.json`）；install 只「比對並提示」，不改寫 `settings.json`
 - 改過 app 原始碼要重建 → 直接跑 `app/build.sh`

@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 #
-# install.sh — one-shot setup for the ultra-attention-reminder hook:
-#   1. symlink the hook into ~/.claude/hooks/ (via the repo's link-hook.sh)
-#   2. build Reminder.app if its executable isn't already in place
-#   3. check (don't touch) the ~/.claude/settings.json registration
+# install.sh — post-link setup for the ultra-attention-reminder hook, run by
+# scripts/link-hook.sh after it symlinks the hook:
+#   1. build Reminder.app if its executable isn't already in place
+#   2. check (don't touch) the ~/.claude/settings.json registration
 #
-# Idempotent: safe to re-run. To force a rebuild after editing the app, run
-# app/build.sh directly.
+# Idempotent. To force a rebuild after editing the app, run app/build.sh.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,10 +16,7 @@ exe="$app/Contents/MacOS/Reminder"
 settings="$HOME/.claude/settings.json"
 command_path="~/.claude/hooks/$hook_name/hook.sh"
 
-# 1. Link the hook into the Claude Code runtime.
-"$repo_root/scripts/link-hook.sh" "$hook_name"
-
-# 2. Build the app only if its executable isn't already in place.
+# 1. Build the app only if its executable isn't already in place.
 if [ -x "$exe" ]; then
   echo "ok: Reminder.app already built — run app/build.sh to rebuild"
 else
@@ -28,8 +24,8 @@ else
   "$here/app/build.sh"
 fi
 
-# 3. Registration stays manual (declare-and-compare: settings.json is live
-#    runtime state we neither version nor rewrite). Just report whether it's wired.
+# 2. Registration stays manual (declare-and-compare: settings.json is live
+#    runtime state we neither version nor rewrite). Report whether it's wired.
 if command -v jq >/dev/null 2>&1 && [ -f "$settings" ] &&
   jq -e --arg c "$command_path" 'any(.. | .command? // empty; . == $c)' "$settings" >/dev/null 2>&1; then
   echo "ok: registered in settings.json"
