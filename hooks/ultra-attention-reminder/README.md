@@ -20,6 +20,22 @@
 
 　
 
+## 安裝
+
+首次安裝執行：
+
+```sh
+hooks/ultra-attention-reminder/install.sh
+```
+
+它會：連結 hook 進 `~/.claude/hooks/`、（`Reminder.app` 的執行檔不存在時）建置它、並檢查 `~/.claude/settings.json` 是否已註冊。可重複執行。
+
+- 註冊本身仍手動（declare-and-compare，見 `settings.hooks.json`）；install 只「比對並提示」，不改寫 `settings.json`
+- 改過 app 原始碼要重建 → 直接跑 `app/build.sh`
+- 註冊或改動後需**重啟 Claude Code** 才生效
+
+　
+
 ## 設計取向
 
 - **一支腳本、兩個事件**：
@@ -82,7 +98,7 @@
 
 建置與使用：
 
-- **建置**：執行 `app/build.sh`（可重複執行，每次重建並覆蓋產物）
+- **建置**：首次安裝由 `install.sh` 處理；改過 app 後以 `app/build.sh` 重建（可重複執行，每次重建並覆蓋產物）
 - **無第三方相依**：只用系統內建的 `swiftc` / `codesign` / `sips` / `iconutil`，ad-hoc 簽章免 Apple Developer 帳號
 - **僅首次授權**：第一次發送會跳「允許通知」，按一次即可
 - **產物不進版控**：`.app` 是 runtime 產物，置於 `~/.claude/tools/`
