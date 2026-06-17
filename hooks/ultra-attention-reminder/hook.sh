@@ -65,8 +65,10 @@ esac
 # back to where Claude was running — pass the most precise handle we can resolve
 # for this terminal, with --activate as the app-level floor. The click handler
 # in the app has none of this session's env, so we bake the handle in here.
+# Test the executable, not just the dir: a half-built/broken bundle must fall
+# through to the osascript backend rather than swallow the notification.
 app="$HOME/.claude/tools/Reminder.app"
-if [ -d "$app" ]; then
+if [ -x "$app/Contents/MacOS/Reminder" ]; then
   app_args=(--title "$title" --body "$body" --sound Glass)
   case "${TERM_PROGRAM:-}" in
     iTerm.app) [ -n "${ITERM_SESSION_ID:-}" ] && app_args+=(--iterm-session "${ITERM_SESSION_ID#*:}") ;;
