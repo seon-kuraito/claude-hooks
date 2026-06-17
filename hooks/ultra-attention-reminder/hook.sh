@@ -30,9 +30,24 @@ case "${TERM_PROGRAM:-}" in
   *) my_bundle="" ;;
 esac
 
-# Cadence gate: skip when the terminal running Claude is frontmost — you're watching.
+# Cadence gate: stay silent only when you're actually watching THIS session.
+# lsappinfo resolves the frontmost *app*, not the window — too coarse when you
+# run several terminal windows. So when our terminal app is frontmost, go one
+# level deeper where we can: for iTerm, ask which session is frontmost and
+# suppress only if it's the one that fired this hook. Terminals with no session
+# probe stay app-level. When in doubt, notify — missing a finished run is worse
+# than one extra banner.
 front_bundle=$(lsappinfo info -only bundleID "$(lsappinfo front 2>/dev/null)" 2>/dev/null | cut -d'"' -f4)
-[ -n "$my_bundle" ] && [ "$front_bundle" = "$my_bundle" ] && exit 0
+if [ -n "$my_bundle" ] && [ "$front_bundle" = "$my_bundle" ]; then
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app)
+      # `id of session` shares a namespace with the UUID half of ITERM_SESSION_ID.
+      front_session=$(osascript -e 'tell application "iTerm2" to tell current window to tell current session to get id' 2>/dev/null)
+      [ -n "$front_session" ] && [ "$front_session" = "${ITERM_SESSION_ID#*:}" ] && exit 0
+      ;;
+    *) exit 0 ;;
+  esac
+fi
 
 # Title: project (cwd basename) Title-cased, e.g. claude-hooks → Claude Hooks.
 # awk keeps this portable to macOS's stock bash 3.2 (no bash-4 ${var^}).
@@ -46,10 +61,19 @@ case "$(printf '%s' "$input" | jq -r '.hook_event_name // empty')" in
   *) exit 0 ;;
 esac
 
-# Preferred backend: the bundled app (custom icon).
+# Preferred backend: the bundled app (custom icon). Clicking the banner jumps
+# back to where Claude was running — pass the most precise handle we can resolve
+# for this terminal, with --activate as the app-level floor. The click handler
+# in the app has none of this session's env, so we bake the handle in here.
 app="$HOME/.claude/tools/Reminder.app"
 if [ -d "$app" ]; then
-  open -n "$app" --args --title "$title" --body "$body" --sound Glass
+  app_args=(--title "$title" --body "$body" --sound Glass)
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app) [ -n "${ITERM_SESSION_ID:-}" ] && app_args+=(--iterm-session "${ITERM_SESSION_ID#*:}") ;;
+    vscode) app_args+=(--code-dir "${cwd:-$PWD}") ;;
+  esac
+  [ -n "$my_bundle" ] && app_args+=(--activate "$my_bundle")
+  open -n "$app" --args "${app_args[@]}"
   exit 0
 fi
 
