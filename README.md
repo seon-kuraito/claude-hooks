@@ -36,14 +36,14 @@ scripts/link-hook.sh <hook-name>
 
 `<hook-name>` 是 hook 在 `hooks/` 中的資料夾名（例如 `notify-on-stop`）。
 
-腳本具備「冪等性」（Idempotence）：對已連結的 hook 重複執行不會有任何動作，也不會覆蓋任何非自身 symlink 的目標（例如同名的第三方 hook）。
+腳本具備「冪等性」（Idempotence）：重複執行不會覆蓋任何非自身 symlink 的目標（例如同名的第三方 hook）。若該 hook 自帶 `install.sh`，連結後會一併執行它（冪等的 post-link 設定，例如建置產物、檢查註冊）。
 
 　
 
 ## 新增 hook
 
 1. 在 `hooks/<hook-name>/` 下撰寫 hook（內含 `hook.sh` 進入點的資料夾）。
-2. 執行 `scripts/link-hook.sh <hook-name>` 讓它出現在 `~/.claude/hooks/`。
+2. 執行 `scripts/link-hook.sh <hook-name>` 讓它出現在 `~/.claude/hooks/`（若 hook 帶 `install.sh`，連結後會一併執行其 post-link 設定）。
 3. 為 hook 撰寫一份自己的 `README.md`，說明：
    - **用途**：解決什麼問題、何時觸發
    - **來源**：原創，或衍生自哪個上游專案
