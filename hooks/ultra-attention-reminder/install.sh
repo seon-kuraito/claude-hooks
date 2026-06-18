@@ -30,5 +30,5 @@ if command -v jq >/dev/null 2>&1 && [ -f "$settings" ] &&
   jq -e --arg c "$command_path" 'any(.. | .command? // empty; . == $c)' "$settings" >/dev/null 2>&1; then
   echo "ok: registered in settings.json"
 else
-  echo "TODO: register the hook in $settings per $repo_root/settings.hooks.json, then restart Claude Code"
+  echo "TODO: register the hook in $settings per $repo_root/settings.hooks.json (takes effect on save; restart Claude Code if needed)"
 fi
