@@ -1,8 +1,8 @@
-// Reminder — a tiny LSUIElement app that posts a desktop notification via
+// Notifier — a tiny LSUIElement app that posts a desktop notification via
 // UserNotifications so the banner carries this bundle's own icon.
 //
 // Launched per notification by hook.sh via `open`, detached, e.g.:
-//   open -n Reminder.app --args --title "Claude Hooks" --body "✅ Task Finished" \
+//   open -n Notifier.app --args --title "Claude Hooks" --body "✅ Task Finished" \
 //     --sound Glass --iterm-session "UUID" --activate com.googlecode.iterm2
 //
 // Clicking the banner jumps back to where Claude was running, using the most

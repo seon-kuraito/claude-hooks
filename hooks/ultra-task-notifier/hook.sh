@@ -6,7 +6,7 @@
 # system renders it bold; the body carries the status verb with a colored emoji.
 #
 # Two backends, progressive enhancement:
-#   - Reminder.app (preferred): the notification carries a custom icon.
+#   - Notifier.app (preferred): the notification carries a custom icon.
 #   - osascript (fallback, where the app isn't built).
 #
 # Pure side-effect: never blocks, always exits 0.
@@ -67,8 +67,8 @@ esac
 # in the app has none of this session's env, so we bake the handle in here.
 # Test the executable, not just the dir: a half-built/broken bundle must fall
 # through to the osascript backend rather than swallow the notification.
-app="$HOME/.claude/tools/Reminder.app"
-if [ -x "$app/Contents/MacOS/Reminder" ]; then
+app="$HOME/.claude/tools/Notifier.app"
+if [ -x "$app/Contents/MacOS/Notifier" ]; then
   app_args=(--title "$title" --body "$body" --sound Glass)
   case "${TERM_PROGRAM:-}" in
     iTerm.app) [ -n "${ITERM_SESSION_ID:-}" ] && app_args+=(--iterm-session "${ITERM_SESSION_ID#*:}") ;;

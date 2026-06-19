@@ -2,7 +2,7 @@
 #
 # install.sh — post-link setup for the ultra-task-notifier hook, run by
 # scripts/link-hook.sh after it symlinks the hook:
-#   1. build Reminder.app if its executable isn't already in place
+#   1. build Notifier.app if its executable isn't already in place
 #   2. check (don't touch) the ~/.claude/settings.json registration
 #
 # Idempotent. To force a rebuild after editing the app, run app/build.sh.
@@ -11,16 +11,16 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 hook_name="$(basename "$here")"
 repo_root="$(cd "$here/../.." && pwd)"
-app="${CLAUDE_TOOLS_DIR:-$HOME/.claude/tools}/Reminder.app"
-exe="$app/Contents/MacOS/Reminder"
+app="${CLAUDE_TOOLS_DIR:-$HOME/.claude/tools}/Notifier.app"
+exe="$app/Contents/MacOS/Notifier"
 settings="$HOME/.claude/settings.json"
 command_path="~/.claude/hooks/$hook_name/hook.sh"
 
 # 1. Build the app only if its executable isn't already in place.
 if [ -x "$exe" ]; then
-  echo "ok: Reminder.app already built — run app/build.sh to rebuild"
+  echo "ok: Notifier.app already built — run app/build.sh to rebuild"
 else
-  echo "building Reminder.app…"
+  echo "building Notifier.app…"
   "$here/app/build.sh"
 fi
 

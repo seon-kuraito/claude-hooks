@@ -1,6 +1,6 @@
 # Session targeting and return
 
-Whether to send a notification — and where clicking it jumps back to — both hinge on the same thing: **which session Claude Code is currently in**. The hook passes this to `Reminder.app` when it fires, so a click can return to the right place. This file records each terminal's locating capability, the notify / return implementation boundary, and the trade-offs deliberately taken or rejected; the README keeps only a high-level summary.
+Whether to send a notification — and where clicking it jumps back to — both hinge on the same thing: **which session Claude Code is currently in**. The hook passes this to `Notifier.app` when it fires, so a click can return to the right place. This file records each terminal's locating capability, the notify / return implementation boundary, and the trade-offs deliberately taken or rejected; the README keeps only a high-level summary.
 
 ## Locating precision
 
@@ -20,7 +20,7 @@ Different terminals expose different ways to locate the session:
 ## Key trade-offs
 
 - **iTerm uses AppleScript `select`, not the URL scheme.** `iterm2:///reveal?sessionid=` does not work on current iTerm (3.6.x) in practice: the scheme is registered and `open` succeeds, but focus does not move. Selecting a session by id via AppleScript is the only precise option.
-- **The decision needs no permission; the return does.** The notify decision runs inside the hook (a descendant process of iTerm), so it needs no authorization. The click-return's Apple Events are sent by `Reminder.app` (outside iTerm's process tree), so the first return needs Automation authorization.
+- **The decision needs no permission; the return does.** The notify decision runs inside the hook (a descendant process of iTerm), so it needs no authorization. The click-return's Apple Events are sent by `Notifier.app` (outside iTerm's process tree), so the first return needs Automation authorization.
 - **Cross-desktop / screen is left to the system.** This relies on the macOS "switch to a Space with a window when activating an app" setting (`AppleSpacesSwitchOnActivate`, on by default); turning it off confines the jump to the current desktop. The hook does not change it — changing it requires restarting the Dock.
 
 ## Accepted limitations

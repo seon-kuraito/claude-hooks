@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# build.sh — compile Reminder.swift, assemble the .app bundle, attach the
+# build.sh — compile Notifier.swift, assemble the .app bundle, attach the
 # icon, and ad-hoc sign it. The source of truth lives in this directory; the
 # built .app is a runtime artifact (not version-controlled), placed in
 # ~/.claude/tools (override with CLAUDE_TOOLS_DIR).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-name="Reminder"
+name="Notifier"
 dest="${CLAUDE_TOOLS_DIR:-$HOME/.claude/tools}/$name.app"
 contents="$dest/Contents"
 work="$(mktemp -d)"
@@ -18,7 +18,7 @@ rm -rf "$dest"
 mkdir -p "$contents/MacOS" "$contents/Resources"
 
 # 1. Compile the executable straight into the bundle.
-swiftc -O -o "$contents/MacOS/$name" "$here/Reminder.swift"
+swiftc -O -o "$contents/MacOS/$name" "$here/Notifier.swift"
 
 # 2. Bundle metadata.
 cp "$here/Info.plist" "$contents/Info.plist"
