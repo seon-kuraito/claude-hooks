@@ -4,6 +4,16 @@
 
 　
 
+## Hooks 一覽
+
+本 repo 目前維護以下 hook：
+
+| hook | 用途 | 來源 |
+| --- | --- | --- |
+| [`ultra-attention-reminder`](hooks/ultra-attention-reminder) | 在回合結束或等待介入時發送 macOS 桌面通知 | 原創 |
+
+　
+
 ## 運作方式
 
 Hooks 和 skills 的接線方式不同：hooks 沒有探索目錄。每個 hook 都是在 `~/.claude/settings.json` 裡登記指令路徑，而路徑可以指向任何位置。本 repo 利用這一點，把 hook 腳本納入版控，同時避免直接管理那份經常變動的設定檔：
