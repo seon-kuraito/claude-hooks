@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ultra-attention-reminder/hook.sh"
+            "command": "~/.claude/hooks/ultra-task-notifier/hook.sh"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ultra-attention-reminder/hook.sh"
+            "command": "~/.claude/hooks/ultra-task-notifier/hook.sh"
           }
         ]
       }
