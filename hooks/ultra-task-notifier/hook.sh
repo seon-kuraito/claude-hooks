@@ -57,7 +57,17 @@ title=$(printf '%s' "$project" | awk '{ gsub(/[-_]/, " "); for (i = 1; i <= NF; 
 
 case "$(printf '%s' "$input" | jq -r '.hook_event_name // empty')" in
   Stop) body="✅ Task Finished" ;;
-  Notification) body="🔔 Task Paused" ;;
+  Notification)
+    # Route by notification_type: notify only on the types that need you; stay
+    # silent on the rest (idle_prompt, elicitation_complete/_response, and any
+    # unknown type) so one finished turn never yields a second, redundant banner.
+    case "$(printf '%s' "$input" | jq -r '.notification_type // empty')" in
+      permission_prompt)  body="🔔 Permission Needed" ;;
+      elicitation_dialog) body="📝 Input Requested" ;;
+      auth_success)       body="🔑 Authenticated" ;;
+      *) exit 0 ;;
+    esac
+    ;;
   *) exit 0 ;;
 esac
 
