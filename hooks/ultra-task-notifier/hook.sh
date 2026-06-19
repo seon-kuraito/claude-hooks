@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ultra-attention-reminder — desktop notification with sound when you've stepped
+# ultra-task-notifier — desktop notification with sound when you've stepped
 # away from the terminal. Registered on Stop and Notification, branched on
 # hook_event_name. The title is the project (cwd basename, Title-cased) so the
 # system renders it bold; the body carries the status verb with a colored emoji.

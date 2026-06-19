@@ -1,4 +1,4 @@
-# Ultra Attention Reminder
+# Ultra Task Notifier
 
 當 Claude Code 結束回合或等待介入，而使用者已離開終端機時，發送一則帶音效的 macOS 桌面通知。
 
@@ -50,7 +50,7 @@
 
   ```sh
   cd claude-hooks
-  scripts/link-hook.sh ultra-attention-reminder
+  scripts/link-hook.sh ultra-task-notifier
   ```
 
   - 連結進 `~/.claude/hooks/`；本 hook 帶有 `install.sh`，連結後會自動建立 `Reminder.app`，並**檢查（不改寫）**註冊狀態
@@ -58,7 +58,7 @@
 - **註冊到 `settings.json`（手動，兩種安裝方式都需要）**：
   1. 打開 `~/.claude/settings.json`（沒有就新建）
   2. 在頂層 `hooks` 下，加入 `Stop` 與 `Notification`（matcher 為空字串 `""`）兩個事件
-  3. 兩者的 `command` 都填 `~/.claude/hooks/ultra-attention-reminder/hook.sh`
+  3. 兩者的 `command` 都填 `~/.claude/hooks/ultra-task-notifier/hook.sh`
   4. 完整 JSON 見 repo 的 [`settings.hooks.json`](../../settings.hooks.json)，照抄或合併進去後存檔即生效
 
 　

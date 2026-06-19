@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install.sh — post-link setup for the ultra-attention-reminder hook, run by
+# install.sh — post-link setup for the ultra-task-notifier hook, run by
 # scripts/link-hook.sh after it symlinks the hook:
 #   1. build Reminder.app if its executable isn't already in place
 #   2. check (don't touch) the ~/.claude/settings.json registration

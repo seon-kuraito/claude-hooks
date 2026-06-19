@@ -10,7 +10,7 @@
 
 | hook | 用途 | 來源 |
 | --- | --- | --- |
-| [`ultra-attention-reminder`](hooks/ultra-attention-reminder) | 在回合結束或等待介入時發送 macOS 桌面通知 | 原創 |
+| [`ultra-task-notifier`](hooks/ultra-task-notifier) | 在回合結束或等待介入時發送 macOS 桌面通知 | 原創 |
 
 　
 
@@ -44,7 +44,7 @@ Hooks 和 skills 的接線方式不同：hooks 沒有探索目錄。每個 hook 
 scripts/link-hook.sh <hook-name>
 ```
 
-`<hook-name>` 是 `hooks/` 下的資料夾名稱（例如：`ultra-attention-reminder`）。
+`<hook-name>` 是 `hooks/` 下的資料夾名稱（例如：`ultra-task-notifier`）。
 
 腳本可重複執行：已連結的 hook 會略過，也不會覆蓋非自身管理的 symlink（例如：同名的第三方 hook）。若該 hook 自帶 `install.sh`，連結後會一併執行，用來處理可重複的 post-link 設定（例如：建置產物或檢查註冊）。
 
