@@ -29,8 +29,8 @@
 
 - **掛在 `Stop` 與 `Notification` 兩個事件**：
   - 回合結束、等待權限或輸入時，發一則帶音效的 macOS 桌面通知
-- **只在「沒有看著來源 session」時才發送**：
-  - iTerm 可精準到 session，其餘終端機退回 App 級判斷；點擊通知會嘗試跳回來源視窗
+- **看不到來源 session 時才提醒**：
+  - iTerm 可精準判斷 session；其他終端機則退回 App 層級判斷，會嘗試跳回原本的視窗
 - **通知後端漸進式增強（Progressive Enhancement）**：
   - 優先使用 `Reminder.app`（自訂圖示），未建立時退回 `osascript`
 - **主要實作集中在 hook.sh**：
@@ -73,49 +73,17 @@
   - 優先使用 `~/.claude/tools/Reminder.app` 作為通知後端，支援自訂圖示
   - 若尚未建立 `Reminder.app`，則自動退回 `osascript`
   - `osascript` 無自訂圖示，通知來源會顯示為執行 `osascript` 的 host（例如：Script Editor）
-- **只在使用者離開目前 session 時通知**：
-  - Claude Code 每回合結束或等待介入時都會觸發事件，但 hook 只在使用者沒有看著來源 session 時發送通知
-  - 先用 `lsappinfo` 判斷最前景 app 是否為執行 Claude Code 的終端機
-  - iTerm 可進一步以 `osascript` 比對「最前景的 session id」與「發出通知的 session id」；若使用者正在看同一個 session，則保持靜默，若只是同一個 App 的其他視窗或分頁，仍會通知
-  - 其他終端機沒有 session 探測能力，因此退回 App 級判斷；只要使用者正在看該終端機 App 的任一視窗，就不發送通知
-- **點擊通知可回到來源視窗**：
-  - 點擊通知橫幅後，會嘗試跳回 Claude Code 所在的視窗
-  - iTerm 以 session id 搭配 AppleScript `select` 跳回來源 session；VS Code 以專案資料夾定位來源視窗；其餘終端機則退回 App 級啟用
-  - 跨桌面與跨螢幕的切換交由 macOS 系統行為處理，詳細取捨見「設計決策與取捨」
+- **依來源 session 判斷提醒與跳轉位置**：
+  - 只有在使用者沒有看著來源 session 時，才會發送通知；點擊通知橫幅後，會嘗試回到該 session
+  - iTerm 可精準定位到 session（視窗／分頁／分割）；其他終端機則退回 App 層級判斷
+  - 判斷是否需要提醒、以及點擊後要回到哪裡，都取決於「Claude Code 當下所在的 session」
+  - 定位精準度、各終端機差異與授權取捨，請見 [`references/session-targeting.md`](references/session-targeting.md)
 - **保持純 side effect，不阻擋主流程**：
   - hook 不論成功或失敗都一律 `exit 0`，也不回傳任何 decision JSON
   - 若執行環境不適合發送通知（例如：遠端環境、非 macOS 或缺少 `jq`），則靜默跳過
 - **動態內容一律透過 argv 傳入**：
   - 通知標題與內文皆以引數傳入，不把動態字串內嵌進腳本
   - `Reminder.app` 使用 `--args` 傳遞，`osascript` 則使用 argv 傳遞
-
-　
-
-### 設計決策與取捨
-
-是否通知與點擊後跳回哪裡，都取決於同一件事：Claude Code 當下在哪個 session。hook 會在發送通知時把這個資訊傳給 `Reminder.app`，讓它之後能跳回正確位置。
-
-不同終端機能提供的定位方式不同：
-
-| 終端機 | 定位方式 | 精準度 | 權限 |
-|-------|----------|-------|------|
-| iTerm | `ITERM_SESSION_ID` | session（視窗／分頁／分割） | 判斷是否通知免授權；點擊跳回首次需一次「允許控制 iTerm」 |
-| VS Code | 專案資料夾路徑 | 視窗（靠「一資料夾一視窗」慣例） | 無 |
-| 其他 | App bundle | App 級 | 無 |
-
-關鍵取捨：
-
-- **iTerm 用 AppleScript `select`**：
-  - `iterm2:///reveal?sessionid=` 在現行 iTerm（3.6.x）實測無效：scheme 有註冊、`open` 成功，但焦點不動
-  - AppleScript 按 id 選 session 才精準，但代價是點擊跳回的 Apple Events 由 `Reminder.app` 發出（不在 iTerm 程序樹內），第一次跳回需要授權 Automation
-  - 是否通知的判斷則在 hook（iTerm 子孫程序）內執行，免授權
-- **跨桌面 / 螢幕交給系統處理**：
-  - 靠 macOS「切換 App 時切到有視窗的桌面」設定（`AppleSpacesSwitchOnActivate`，預設開）
-  - 關掉它就只在當前桌面生效；hook 不擅自更改（改它要重啟 Dock）
-- **刻意不解的邊角**：
-  - VS Code 只能判斷目前是不是在看 VS Code 這個 App（VS Code 無法從外部回報前景視窗）；看著 VS Code 視窗 A 時，視窗 B 完成仍會被靜音
-  - 要精準到「VS Code 裡的某個終端分頁」→ 需在該終端跑 tmux
-  - 任意終端機、多視窗散在多桌面要命中「那一個」→ 只有私有 SkyLight API 做得到（免 SIP、ad-hoc 可），但私有 API 容易被 macOS 版本改壞，因此**不採用**（改退回 App 級）
 
 　
 
