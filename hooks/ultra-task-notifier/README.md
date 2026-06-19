@@ -1,6 +1,6 @@
 # Ultra Task Notifier
 
-當 Claude Code 結束回合或等待介入，而使用者已經離開終端機時，發送一則帶音效的 macOS 桌面通知。
+當 Claude Code 結束回合、或需要你介入時，如果你已經離開終端機，就發送一則帶音效的 macOS 桌面通知。
 
 　
 
@@ -17,7 +17,7 @@
 ## 為什麼做這個 hook（WHY）
 
 - **畫面離開就錯過**：
-  - Claude Code 結束回合或等待輸入時，如果使用者不在終端機前，就很容易錯過並空等
+  - Claude Code 結束回合、等待授權或需要輸入時，如果使用者不在終端機前，就很容易錯過並空等
 - **多個 session 分不清**：
   - 同時開多個終端機或視窗跑 Claude 時，通知響了也不一定知道是哪個 session 需要處理
 - **需要反覆回頭確認**：
@@ -28,7 +28,7 @@
 ## 這個 hook 做什麼（WHAT）
 
 - **掛在 `Stop` 與 `Notification` 兩個事件**：
-  - 回合結束、等待權限或輸入時，發一則帶音效的 macOS 桌面通知
+  - 回合結束，或出現需要你留意的通知（例如：工具授權、表單輸入或認證完成）時，發一則帶音效的 macOS 桌面通知
 - **看不到來源 session 時才提醒**：
   - iTerm 可精準判斷 session；其他終端機則退回 App 層級判斷，點擊通知後會嘗試回到原本的視窗
 - **通知後端漸進式增強（Progressive Enhancement）**：
@@ -66,9 +66,10 @@
 ### 設計取向
 
 - **同一支腳本處理兩種事件**：
-  - hook 同時註冊在 `Stop` 與 `Notification` 事件上，並透過 stdin 裡的 `hook_event_name` 判斷目前事件類型
+  - hook 同時註冊在 `Stop` 與 `Notification` 事件上
+  - 先讀 stdin 的 `hook_event_name` 區分事件，如果是 `Notification`，再依 `notification_type` 決定是否提醒
+  - `notification_type` 只針對值得提醒的類型發送通知，其餘類型則保持靜默，避免同一回合跳出重複通知
   - 通知標題包含專案名稱；專案名稱由 cwd basename 轉成 Title Case（例如：`claude-hooks` → `Claude Hooks`）
-  - `Stop` 事件顯示 `✅ Task Finished`，`Notification` 事件顯示 `🔔 Task Paused`
 - **通知方式採漸進式增強**：
   - 優先使用 `~/.claude/tools/Notifier.app` 作為通知後端，支援自訂圖示
   - 若尚未建立 `Notifier.app`，則自動退回 `osascript`
@@ -119,7 +120,8 @@
 - **平台**：
   - 僅 macOS：app 後端靠 `UserNotifications`，osascript 後端靠 `osascript`；焦點偵測靠 `lsappinfo`、事件解析靠 `jq`
 - **事件**：
-  - `Stop`（無 matcher）與 `Notification`（空 matcher，涵蓋所有通知類型）
+  - `Stop`，無 matcher
+  - `Notification`，matcher 先留空（接收所有類型），hook 再依 `notification_type` 分流，只針對需要提醒的類型發送通知
 - **終端機辨識**：
   - 依下方對照表把 `TERM_PROGRAM` 對到 macOS App，用於前景判斷與點擊跳回
   - 目前內建支援 iTerm2／Terminal／VS Code／Ghostty／WezTerm
