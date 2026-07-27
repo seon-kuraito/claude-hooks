@@ -70,13 +70,18 @@
   - 先讀 stdin 的 `hook_event_name` 區分事件，如果是 `Notification`，再依 `notification_type` 決定是否提醒
   - `notification_type` 只針對值得提醒的類型發送通知，其餘類型則保持靜默，避免同一回合跳出重複通知
   - 通知標題包含專案名稱；專案名稱由 cwd basename 轉成 Title Case（例如：`claude-hooks` → `Claude Hooks`）
+  - session 跑在 git worktree 裡時（worktree 目錄名常是自動產生的 slug），會解析回主 repo 名稱，標題維持使用者認得的專案名
 - **通知方式採漸進式增強**：
   - 優先使用 `~/.claude/tools/Notifier.app` 作為通知後端，支援自訂圖示
   - 若尚未建立 `Notifier.app`，則自動退回 `osascript`
   - `osascript` 無自訂圖示，通知來源會顯示為執行 `osascript` 的 host（例如：Script Editor）
+- **通知以專案為單位取代，不累積**：
+  - `Notifier.app` 以專案名稱作為通知 identifier：同專案的新通知會取代通知中心裡的舊通知，每個專案最多留一則
+  - `osascript` 後端沒有 identifier 機制，無法取代，通知會照舊累積（僅作為未建立 app 時的退路）
 - **依來源 session 判斷提醒與跳轉位置**：
   - 只有在使用者沒有看著來源 session 時，才會發送通知；點擊通知橫幅後，會嘗試回到該 session
   - iTerm 可精準定位到 session（視窗／分頁／分割）；其他終端機則退回 App 層級判斷
+  - VS Code 點擊跳回：優先開啟專案內的 `.code-workspace`（會聚焦既有視窗）；沒有 workspace 檔就只 activate App——不直接開資料夾路徑，避免在 multi-root workspace 或視窗已關閉時多開新視窗
   - 是否需要提醒、以及點擊後要回到哪裡，都取決於「Claude Code 當下所在的 session」
   - 定位精準度、各終端機差異與授權取捨，請見 [`references/session-targeting.md`](references/session-targeting.md)
 - **保持純 side effect，不阻擋主流程**：
@@ -125,6 +130,7 @@
 - **終端機辨識**：
   - 依下方對照表把 `TERM_PROGRAM` 對到 macOS App，用於前景判斷與點擊跳回
   - 目前內建支援 iTerm2／Terminal／VS Code／Ghostty／WezTerm
+  - VS Code 有兩種進入點：整合終端機（`TERM_PROGRAM=vscode`）與 native extension——後者不經過終端機、沒有 `TERM_PROGRAM`，改以 `CLAUDE_CODE_ENTRYPOINT=claude-vscode` 辨識，bundle id 取自 `__CFBundleIdentifier`（Insiders／VSCodium 等變體也會對到自己）
   - 不在表中的終端機：無法判斷前景，退回為一律發送
 - **音效**：
   - 預設 `Glass`，可改為其他 macOS 內建的提示音效
