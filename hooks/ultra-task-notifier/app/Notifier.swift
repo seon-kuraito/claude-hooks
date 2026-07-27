@@ -3,14 +3,19 @@
 //
 // Launched per notification by hook.sh via `open`, detached, e.g.:
 //   open -n Notifier.app --args --title "Claude Hooks" --body "✅ Task Finished" \
-//     --sound Glass --iterm-session "UUID" --activate com.googlecode.iterm2
+//     --sound Glass --id claude-hooks --iterm-session "UUID" \
+//     --activate com.googlecode.iterm2
+//
+// --id is the notification identifier (stable per project): posting with the
+// same id replaces the delivered notification, so Notification Center holds at
+// most one entry per project instead of accumulating every turn.
 //
 // Clicking the banner jumps back to where Claude was running, using the most
 // precise handle the hook could resolve (the click handler runs here, with none
 // of that session's env, so the hook bakes the handle into the launch args):
-//   --iterm-session <UUID>  → osascript: select that iTerm session  (exact window/tab)
-//   --code-dir <path>       → open -b <vscode> <path>               (the VS Code window for that project)
-//   --activate <bundleID>   → open -b <bundleID>                    (app-level floor)
+//   --iterm-session <UUID>       → osascript: select that iTerm session  (exact window/tab)
+//   --code-workspace <ws-file>   → open -b <vscode> <ws-file>            (the VS Code window holding that workspace)
+//   --activate <bundleID>        → open -b <bundleID>                    (app-level floor)
 // The process stays alive (~5 min) to catch the click before exiting.
 
 import AppKit
@@ -22,9 +27,10 @@ struct Args {
   var title = "Claude Code"
   var body = ""
   var sound: String?
+  var id: String?
   var activateBundleID: String?
   var itermSession: String?
-  var codeDir: String?
+  var codeWorkspace: String?
 }
 
 func parseArgs(_ argv: [String]) -> Args {
@@ -41,15 +47,18 @@ func parseArgs(_ argv: [String]) -> Args {
     case "--sound":
       i += 1
       if i < argv.count { a.sound = argv[i] }
+    case "--id":
+      i += 1
+      if i < argv.count { a.id = argv[i] }
     case "--activate":
       i += 1
       if i < argv.count { a.activateBundleID = argv[i] }
     case "--iterm-session":
       i += 1
       if i < argv.count { a.itermSession = argv[i] }
-    case "--code-dir":
+    case "--code-workspace":
       i += 1
-      if i < argv.count { a.codeDir = argv[i] }
+      if i < argv.count { a.codeWorkspace = argv[i] }
     default: break
     }
     i += 1
@@ -99,12 +108,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // most precise one available (iterm-session > code-dir > activate).
     var info: [String: String] = [:]
     if let s = args.itermSession { info["itermSession"] = s }
-    if let d = args.codeDir { info["codeDir"] = d }
+    if let w = args.codeWorkspace { info["codeWorkspace"] = w }
     if let b = args.activateBundleID { info["activate"] = b }
     content.userInfo = info
 
+    // A stable identifier makes the new notification replace the delivered
+    // one with the same id (macOS replaces on identifier match), capping
+    // Notification Center at one entry per project.
     let request = UNNotificationRequest(
-      identifier: UUID().uuidString, content: content, trigger: nil)
+      identifier: args.id ?? UUID().uuidString, content: content, trigger: nil)
     // Hand the notification to the system, then stay alive so a click lands on
     // this live instance. Quit after the timeout if no click arrives.
     center.add(request) { _ in }
@@ -160,11 +172,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
           end repeat
         end tell
         """)
-    } else if let dir = info["codeDir"] as? String, let bundle = info["activate"] as? String {
-      // VS Code: open the project folder in its app → focuses the window that
-      // already has it (VS Code keeps one window per folder). Via `open` so we
-      // don't depend on the `code` CLI being on the app's sanitized PATH.
-      run(["-b", bundle, dir])
+    } else if let ws = info["codeWorkspace"] as? String, let bundle = info["activate"] as? String {
+      // VS Code: open the project's .code-workspace → focuses the window
+      // already holding it (one workspace, one window). A bare folder path is
+      // deliberately not used: when the folder is a root of a multi-root
+      // workspace (or its window is closed), opening it CREATES a new window
+      // instead of focusing one. Via `open` so we don't depend on the `code`
+      // CLI being on the app's sanitized PATH.
+      run(["-b", bundle, ws])
     } else if let bundle = info["activate"] as? String {
       run(["-b", bundle])
     }
