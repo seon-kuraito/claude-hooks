@@ -179,7 +179,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       // workspace (or its window is closed), opening it CREATES a new window
       // instead of focusing one. Via `open` so we don't depend on the `code`
       // CLI being on the app's sanitized PATH.
-      run(["-b", bundle, ws])
+      //
+      // Two steps, reveal BEFORE activate: macOS picks which Space to switch
+      // to at activation time from the app's then-frontmost window, and a
+      // window focused after activation doesn't pull a second Space switch —
+      // activating first therefore lands on whichever VS Code window is
+      // nearest, not the workspace's. So hand the workspace over without
+      // activation (-g), give VS Code a beat to raise the owning window in
+      // its own ordering, then activate.
+      run(["-g", "-b", bundle, ws])
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.run(["-b", bundle]) }
     } else if let bundle = info["activate"] as? String {
       run(["-b", bundle])
     }
