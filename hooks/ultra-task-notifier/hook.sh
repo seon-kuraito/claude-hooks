@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 #
 # ultra-task-notifier — desktop notification with sound when you've stepped
-# away from the terminal. Registered on Stop and Notification, branched on
-# hook_event_name. The title is the project (cwd basename, Title-cased) so the
-# system renders it bold; the body carries the status verb with a colored emoji.
+# away from where Claude is running (a terminal, or the VS Code native
+# extension). Registered on Stop and Notification, branched on
+# hook_event_name. The title is the project (main-repo name, Title-cased) so
+# the system renders it bold; the body carries the status verb with a colored
+# emoji. Notifications are keyed per project, so only the latest one per
+# project sits in Notification Center.
 #
 # Two backends, progressive enhancement:
 #   - Notifier.app (preferred): the notification carries a custom icon.
@@ -20,14 +23,25 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || [ "$(uname)" != "Darwin" ] ||
   exit 0
 fi
 
-# Map the terminal running Claude to its app bundle id, for the frontmost gate.
+# Map the host running Claude to its app bundle id, for the frontmost gate.
+# TERM_PROGRAM covers terminals (including VS Code's integrated one); the
+# VS Code *native extension* spawns Claude outside any terminal, so it is
+# recognized by CLAUDE_CODE_ENTRYPOINT instead, taking the spawning app's
+# bundle id so Insiders / VSCodium variants resolve to themselves. $host names
+# the cases that get more than app-level treatment further down.
+host=""
 case "${TERM_PROGRAM:-}" in
-  iTerm.app) my_bundle="com.googlecode.iterm2" ;;
+  iTerm.app) my_bundle="com.googlecode.iterm2" host="iterm" ;;
   Apple_Terminal) my_bundle="com.apple.Terminal" ;;
-  vscode) my_bundle="com.microsoft.VSCode" ;;
+  vscode) my_bundle="com.microsoft.VSCode" host="vscode" ;;
   ghostty) my_bundle="com.mitchellh.ghostty" ;;
   WezTerm) my_bundle="com.github.wez.wezterm" ;;
-  *) my_bundle="" ;;
+  *)
+    my_bundle=""
+    if [ "${CLAUDE_CODE_ENTRYPOINT:-}" = "claude-vscode" ]; then
+      my_bundle="${__CFBundleIdentifier:-com.microsoft.VSCode}" host="vscode"
+    fi
+    ;;
 esac
 
 # Cadence gate: stay silent only when you're actually watching THIS session.
@@ -39,8 +53,8 @@ esac
 # than one extra banner.
 front_bundle=$(lsappinfo info -only bundleID "$(lsappinfo front 2>/dev/null)" 2>/dev/null | cut -d'"' -f4)
 if [ -n "$my_bundle" ] && [ "$front_bundle" = "$my_bundle" ]; then
-  case "${TERM_PROGRAM:-}" in
-    iTerm.app)
+  case "$host" in
+    iterm)
       # `id of session` shares a namespace with the UUID half of ITERM_SESSION_ID.
       front_session=$(osascript -e 'tell application "iTerm2" to tell current window to tell current session to get id' 2>/dev/null)
       [ -n "$front_session" ] && [ "$front_session" = "${ITERM_SESSION_ID#*:}" ] && exit 0
@@ -50,9 +64,16 @@ if [ -n "$my_bundle" ] && [ "$front_bundle" = "$my_bundle" ]; then
 fi
 
 # Title: project (cwd basename) Title-cased, e.g. claude-hooks → Claude Hooks.
-# awk keeps this portable to macOS's stock bash 3.2 (no bash-4 ${var^}).
+# A session may run inside a linked git worktree whose directory name is a
+# generated slug — resolve through --git-common-dir to the main repo so the
+# title stays the project name the user knows. The guard on */.git keeps
+# non-repo dirs, submodules, and pre-2.31 git (no --path-format) on the plain
+# basename. awk keeps the Title-casing portable to macOS's stock bash 3.2.
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
-project=$(basename "${cwd:-$PWD}")
+project_dir="${cwd:-$PWD}"
+common=$(git -C "$project_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+case "$common" in */.git) project_dir=$(dirname "$common") ;; esac
+project=$(basename "$project_dir")
 title=$(printf '%s' "$project" | awk '{ gsub(/[-_]/, " "); for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2); print }')
 
 case "$(printf '%s' "$input" | jq -r '.hook_event_name // empty')" in
@@ -79,10 +100,19 @@ esac
 # through to the osascript backend rather than swallow the notification.
 app="$HOME/.claude/tools/Notifier.app"
 if [ -x "$app/Contents/MacOS/Notifier" ]; then
-  app_args=(--title "$title" --body "$body" --sound Glass)
-  case "${TERM_PROGRAM:-}" in
-    iTerm.app) [ -n "${ITERM_SESSION_ID:-}" ] && app_args+=(--iterm-session "${ITERM_SESSION_ID#*:}") ;;
-    vscode) app_args+=(--code-dir "${cwd:-$PWD}") ;;
+  # --id keys the notification to the project: a newer banner replaces the
+  # delivered one instead of piling up in Notification Center.
+  app_args=(--title "$title" --body "$body" --sound Glass --id "$project")
+  case "$host" in
+    iterm) [ -n "${ITERM_SESSION_ID:-}" ] && app_args+=(--iterm-session "${ITERM_SESSION_ID#*:}") ;;
+    vscode)
+      # Pass the project's own .code-workspace when it has one — opening it
+      # focuses the window already holding it. A bare folder path is never
+      # passed: when the folder is a workspace root (or its window is gone),
+      # `open` would spawn a NEW window; app activation is the safe floor.
+      ws=$(find "${cwd:-$PWD}/.vscode" "${cwd:-$PWD}" -maxdepth 1 -name '*.code-workspace' -type f 2>/dev/null | head -1)
+      [ -n "$ws" ] && app_args+=(--code-workspace "$ws")
+      ;;
   esac
   [ -n "$my_bundle" ] && app_args+=(--activate "$my_bundle")
   open -n "$app" --args "${app_args[@]}"
