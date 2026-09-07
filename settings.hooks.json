@@ -21,6 +21,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|NotebookEdit|Glob|Grep|Bash|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/ultra-secret-blocker/hook.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

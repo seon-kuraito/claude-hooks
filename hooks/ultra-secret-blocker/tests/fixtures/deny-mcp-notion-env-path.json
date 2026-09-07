@@ -1,0 +1,15 @@
+{
+  "session_id": "test-session",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/Users/seonkuraito/Developer/demo",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "mcp__claude_ai_Notion__notion-create-pages",
+  "tool_input": {
+    "pages": [
+      {
+        "content": "Setup notes: copy /Users/seonkuraito/Developer/demo/.env into place."
+      }
+    ]
+  }
+}

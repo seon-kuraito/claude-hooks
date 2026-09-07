@@ -10,6 +10,7 @@
 
 | hook | 用途 | 來源 |
 | --- | --- | --- |
+| [`ultra-secret-blocker`](hooks/ultra-secret-blocker) | 在工具執行前拒絕任何碰到祕密檔案的呼叫 | 原創 |
 | [`ultra-task-notifier`](hooks/ultra-task-notifier) | 在回合結束或等待介入時發送 macOS 桌面通知 | 原創 |
 
 　
