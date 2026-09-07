@@ -1,0 +1,16 @@
+{
+  "session_id": "test-session",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/Users/seonkuraito/Developer/demo",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "TodoWrite",
+  "tool_input": {
+    "todos": [
+      {
+        "content": "Read .env.local and wire the keys",
+        "status": "pending"
+      }
+    ]
+  }
+}
