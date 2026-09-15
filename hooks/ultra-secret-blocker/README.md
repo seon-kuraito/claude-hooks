@@ -99,6 +99,8 @@
   - dotfile 名稱需要前方邊界，因此 `process.env`、`import.meta.env` 與 `next-env.d.ts` 不會被誤攔
   - `id_rsa` 這類裸名與 `<字幹>.key` 這類後綴不需要前方的 `/`，因此 `cat private.key` 與 `ssh-keygen -f id_rsa` 擋得到
   - 後綴要求至少一個字幹字元，否則 `jq -r '.key'` 會誤中
+  - jq 濾鏡中的欄位路徑會先遮蔽再比對：包含 `gh` 的 `--jq` 值，以及 `jq` 的第一個位置引數，因此 `gh api … --jq '.licenseInfo.key'` 不會誤中
+  - jq 濾鏡本身不會開啟檔案，因此遮蔽只套用在濾鏡內容；`jq` 的輸入檔、`--slurpfile`／`--rawfile` 的值，以及 `-f`／`--from-file` 指定的檔案仍會比對
   - `credentials` 綁定在 `.aws/` 之下，因為它是一般英文字，放寬會讓 `grep -rn credentials src/` 與 `cd packages/credentials` 一起誤中
 - **MCP 工具掃描整份 `tool_input`**：
   - MCP 的參數欄位名不固定，無法逐一指定，因此掃過 `tool_input` 的每個字串與物件鍵
@@ -134,6 +136,8 @@
 - **已知的誤判**：
   - Bash 指令裡只要提到祕密檔案名就會被擋，即使它並未真的讀檔（例如：`echo ".env" >> .gitignore`、`git commit -m "fix config.key parsing"`）
   - 白名單以外的公開憑證仍會被擋（例如：`cat certs/server.pem`）
+  - jq 濾鏡以外的屬性存取仍會被擋（例如：`node -e "console.log(obj.key)"`）；`gh` 的簡寫 `-q` 不會視為 jq 濾鏡；需使用 `--jq` 套用遮蔽
+  - 超過 4096 字元的指令不做 jq 濾鏡遮蔽，濾鏡中的欄位路徑會照常比對
 - **已知的漏擋**：
   - Bash 指令裡 `.aws/` 以外的 `credentials` 檔不會命中（例如：`cat /etc/app/credentials`）；`Read` 仍會命中
   - MCP 酬載裡不帶 `/` 的裸檔名不會命中（例如：散文中的 `private.key`）；`Read` 與 `Bash` 仍會命中
