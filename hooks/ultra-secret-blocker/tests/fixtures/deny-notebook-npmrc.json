@@ -1,12 +1,12 @@
 {
   "session_id": "test-session",
   "transcript_path": "/tmp/transcript.jsonl",
-  "cwd": "/Users/seonkuraito/Developer/demo",
+  "cwd": "/Users/<user>/Developer/demo",
   "hook_event_name": "PreToolUse",
   "permission_mode": "default",
   "tool_name": "NotebookEdit",
   "tool_input": {
-    "notebook_path": "/Users/seonkuraito/Developer/demo/.npmrc",
+    "notebook_path": "/Users/<user>/Developer/demo/.npmrc",
     "new_source": "x"
   }
 }

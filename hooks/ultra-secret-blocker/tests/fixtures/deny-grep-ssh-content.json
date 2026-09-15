@@ -1,13 +1,13 @@
 {
   "session_id": "test-session",
   "transcript_path": "/tmp/transcript.jsonl",
-  "cwd": "/Users/seonkuraito/Developer/demo",
+  "cwd": "/Users/<user>/Developer/demo",
   "hook_event_name": "PreToolUse",
   "permission_mode": "default",
   "tool_name": "Grep",
   "tool_input": {
     "pattern": "PRIVATE KEY",
-    "path": "/Users/seonkuraito/.ssh",
+    "path": "/Users/<user>/.ssh",
     "output_mode": "content"
   }
 }
