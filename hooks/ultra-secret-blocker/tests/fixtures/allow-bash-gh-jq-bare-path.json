@@ -1,0 +1,11 @@
+{
+  "session_id": "test-session",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/Users/<user>/Developer/demo",
+  "hook_event_name": "PreToolUse",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "gh repo view o/r --json licenseInfo --jq .licenseInfo.key"
+  }
+}
