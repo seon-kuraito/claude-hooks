@@ -20,8 +20,8 @@
 Hooks 和 skills 的接線方式不同：hooks 沒有探索目錄。每個 hook 都是在 `~/.claude/settings.json` 裡登記指令路徑，而路徑可以指向任何位置。本 repo 利用這一點，把 hook 腳本納入版控，同時避免直接管理那份經常變動的設定檔：
 
 ```
-~/Developer/claude-hooks/hooks/<name>/   ← 實際檔案（本 repo）
-~/.claude/hooks/<name>                   ← symlink，逐一建立
+~/Developer/<owner>/claude-hooks/hooks/<name>/   ← 實際檔案（本 repo）
+~/.claude/hooks/<name>                           ← symlink，逐一建立
 ```
 
 和 [claude-skills](https://github.com/seon-kuraito/claude-skills) 一樣，hook 會逐一連結到執行環境：`~/.claude/hooks/` 中官方或第三方直接安裝的 hooks 不會進入本 repo。`settings.json` 中的登記指向 `~/.claude/hooks/<hook-name>/hook.sh`，再透過 symlink 解析回本 repo。
