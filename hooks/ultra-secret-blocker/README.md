@@ -102,6 +102,11 @@
   - jq 濾鏡中的欄位路徑會先遮蔽再比對：包含 `gh` 的 `--jq` 值，以及 `jq` 的第一個位置引數，因此 `gh api … --jq '.licenseInfo.key'` 不會誤中
   - jq 濾鏡本身不會開啟檔案，因此遮蔽只套用在濾鏡內容；`jq` 的輸入檔、`--slurpfile`／`--rawfile` 的值，以及 `-f`／`--from-file` 指定的檔案仍會比對
   - `credentials` 綁定在 `.aws/` 之下，因為它是一般英文字，放寬會讓 `grep -rn credentials src/` 與 `cd packages/credentials` 一起誤中
+- **Bash 以指令文字作為比對範圍**：
+  - 指令字串中出現祕密檔名時會拒絕執行，即使該文字是要寫入文件或作為資料使用（例如：heredoc 內容提到 `.env`、`echo 'rotate id_rsa' >> todo.md`）
+  - 這項誤攔屬於已知取捨：heredoc 內容可能直接交由直譯器執行（例如 `python3 - <<'PY'`），若排除在比對範圍外，會增加繞過風險
+  - 遇到誤攔時，可改寫用詞，或暫時停用這個 hook；不建議以字串拼接規避比對
+  - `tests/fixtures/` 的 `deny-bash-heredoc-mentions-dotenv.json` 與 `deny-bash-echo-mentions-private-key.json` 覆蓋這項行為，避免後續改動誤將其視為 bug
 - **MCP 工具掃描整份 `tool_input`**：
   - MCP 的參數欄位名不固定，無法逐一指定，因此掃過 `tool_input` 的每個字串與物件鍵
   - 這條規則同時看得到內容離開本機的方向（例如：把祕密檔案路徑貼進遠端頁面）
