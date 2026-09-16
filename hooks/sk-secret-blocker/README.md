@@ -1,4 +1,4 @@
-# Ultra Secret Blocker
+# Secret Blocker
 
 在 `PreToolUse` 事件上攔下任何碰到祕密檔案（`.env` 家族、私鑰、憑證庫）的工具呼叫，在工具執行前直接拒絕。
 
@@ -63,7 +63,7 @@
 
   ```sh
   cd claude-hooks
-  scripts/link-hook.sh ultra-secret-blocker
+  scripts/link-hook.sh sk-secret-blocker
   ```
 
   - 連結進 `~/.claude/hooks/`
@@ -71,7 +71,7 @@
 - **註冊到 `settings.json`（手動，兩種安裝方式都需要）**：
   1. 打開 `~/.claude/settings.json`（沒有就新建）
   2. 在頂層 `hooks` 下加入 `PreToolUse`，matcher 為 `Read|Edit|Write|NotebookEdit|Glob|Grep|Bash|mcp__.*`
-  3. 該項目的 `command` 指向 `~/.claude/hooks/ultra-secret-blocker/hook.sh`，並設 `timeout` 為 `5`
+  3. 該項目的 `command` 指向 `~/.claude/hooks/sk-secret-blocker/hook.sh`，並設 `timeout` 為 `5`
   4. 完整宣告見 repo 的 [`settings.hooks.json`](../../settings.hooks.json)，照抄或合併進去後存檔即生效
 
 　

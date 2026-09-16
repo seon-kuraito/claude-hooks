@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # run-checks.sh — the structure and script tiers for this repo, per the family
-# contract in claude-skills/skills/ultra-skill-author/references/verification.md.
+# contract in claude-skills/skills/sk-skill-author/references/verification.md.
 #
 #   scripts/run-checks.sh           every hook
 #   scripts/run-checks.sh <hook>    one hook
@@ -27,7 +27,7 @@ fail=0
 
 # Drift check — every shared rule in the family contract has a file here. The
 # routed-item rules are deliberately absent: nothing routes to a hook.
-spec="$repo/../claude-skills/skills/ultra-skill-author/references/verification.md"
+spec="$repo/../claude-skills/skills/sk-skill-author/references/verification.md"
 if [ -f "$spec" ]; then
   shared=$(awk '/^## Shared rules/{f=1; next} /^## /{f=0} f' "$spec" | grep -oE '^\| `[a-z][a-z-]*`' | tr -d '|` ')
   for rule in $shared; do
