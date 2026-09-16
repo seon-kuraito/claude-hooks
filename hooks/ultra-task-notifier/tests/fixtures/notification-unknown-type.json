@@ -1,0 +1,1 @@
+{ "session_id": "test", "transcript_path": "/tmp/t.jsonl", "cwd": "/tmp", "hook_event_name": "Notification", "notification_type": "something_new", "message": "a type this hook has never seen" }

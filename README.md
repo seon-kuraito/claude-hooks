@@ -51,17 +51,31 @@ scripts/link-hook.sh <hook-name>
 
 　
 
+## 驗證
+
+提交前檢查 repo 裡的 hook：
+
+```sh
+scripts/run-checks.sh              # 全部 hook
+scripts/run-checks.sh <hook-name>  # 單一 hook
+```
+
+這支腳本執行結構層與腳本層檢查，兩者都不消耗模型 token。hook 由事件觸發，模型不會路由到它，因此不設模型層。共通規則來自 [claude-skills](https://github.com/seon-kuraito/claude-skills) 的 `ultra-skill-author/references/verification.md`；並列 repo 不存在時會跳過規則比對，單獨 clone 本 repo 仍可執行。
+
+　
+
 ## 新增 hook
 
 1. 在 `hooks/<hook-name>/` 下撰寫 hook（內含 `hook.sh` 的資料夾）。
 2. 執行 `scripts/link-hook.sh <hook-name>` 讓它出現在 `~/.claude/hooks/`（若 hook 帶 `install.sh`，連結後會一併執行其 post-link 設定）。
-3. 為 hook 撰寫一份自己的 `README.md`，說明：
+3. 為 hook 撰寫 `tests/`：以 fixture 事件 JSON 作為輸入，斷言 exit code、stdout 與可觀察的呼叫。每個 hook 都需提供測試，測項依 hook 性質調整。
+4. 為 hook 撰寫一份自己的 `README.md`，說明：
    - **用途**：解決什麼問題、何時觸發
    - **來源**：原創，或衍生自哪個上游專案
    - **授權**：適用的 license 與相關聲明
-4. commit 前確認來源與授權：
+5. commit 前確認來源與授權：
    - **原創作品**：採用本 repo 的授權
    - **衍生自寬鬆授權的上游**：保留上游授權，並在 hook 資料夾內以 `NOTICE` 標明來源、作者與修改內容
    - **來源不明或授權不相容**：不收入本 repo
-5. 在 `settings.hooks.json` 宣告 hook 的登記方式。
-6. 把登記套用到實際的 `~/.claude/settings.json`。
+6. 在 `settings.hooks.json` 宣告 hook 的登記方式。
+7. 把登記套用到實際的 `~/.claude/settings.json`。
