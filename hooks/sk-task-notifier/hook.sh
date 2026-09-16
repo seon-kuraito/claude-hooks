@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ultra-task-notifier — desktop notification with sound when you've stepped
+# sk-task-notifier — desktop notification with sound when you've stepped
 # away from where Claude is running (a terminal, or the VS Code native
 # extension). Registered on Stop and Notification, branched on
 # hook_event_name. The title is the project (main-repo name, Title-cased) so

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ultra-task-notifier/hook.sh"
+            "command": "~/.claude/hooks/sk-task-notifier/hook.sh"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ultra-task-notifier/hook.sh"
+            "command": "~/.claude/hooks/sk-task-notifier/hook.sh"
           }
         ]
       }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/ultra-secret-blocker/hook.sh",
+            "command": "~/.claude/hooks/sk-secret-blocker/hook.sh",
             "timeout": 5
           }
         ]

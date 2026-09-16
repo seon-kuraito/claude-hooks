@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ultra-secret-blocker — PreToolUse guard. Any tool call that touches a secret
+# sk-secret-blocker — PreToolUse guard. Any tool call that touches a secret
 # file (the .env family, private keys, credential stores) is denied before it
 # runs, and Claude is told why.
 #
@@ -215,7 +215,7 @@ deny() {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
       permissionDecisionReason: (
-        "ultra-secret-blocker blocked this " + $tool + " call: \"" + $target
+        "sk-secret-blocker blocked this " + $tool + " call: \"" + $target
         + "\" matches a secret-file pattern (.env family, private key, credential store). "
         + "Opening it would copy live secrets into the transcript, where they stay for the rest of the session. "
         + "Do not retry and do not route around this. Ask the user for the field name or value you need; "

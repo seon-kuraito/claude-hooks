@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run.sh — the script tier for ultra-task-notifier.
+# run.sh — the script tier for sk-task-notifier.
 #
 # A notification cannot be asserted from a script, so the test asserts the call
 # that would raise it: HOME points at a sandbox holding a stub Notifier.app,
