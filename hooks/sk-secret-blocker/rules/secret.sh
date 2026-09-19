@@ -46,31 +46,54 @@ is_example_name() {
 # Matching is case-insensitive throughout. macOS APFS is case-insensitive by
 # default, so ".ENV" and ".SSH/ID_RSA" open the real files.
 # ---------------------------------------------------------------------------
+# The list itself — the ONLY place a name is written. Everything else (the
+# basename matcher, the glob tokens, the two command-string regexes) is built
+# from these three arrays when the file loads.
+#
+#   SECRET_NAMES     exact basenames
+#   SECRET_FAMILIES  exact basenames that also cover "<name>.<anything>"
+#   SECRET_EXTS      extensions: "<stem>.<ext>"
+SECRET_NAMES=(
+  credentials .git-credentials
+  .netrc _netrc .npmrc .pypirc .htpasswd
+  id_rsa id_ed25519 id_ecdsa id_dsa
+)
+SECRET_FAMILIES=(.env .dev.vars)
+SECRET_EXTS=(pem key p12 pfx jks keystore)
+
+# A bare name that is ordinary prose in a command string ("grep -rn credentials
+# src/" must keep working). In a command it only counts under this directory.
+SECRET_PROSE_NAME=credentials
+SECRET_PROSE_ANCHOR=.aws/
+
 is_secret_basename() {
-  local rc=1
+  local rc=1 entry
   is_public_cert "$1" && return 1
   # bash 3.2 runs these glob patterns in O(n^2). A pathological string must
   # never reach them, or the hook stalls the session for minutes.
   [ "${#1}" -le 4096 ] || return 1
   shopt -s nocasematch
-  case "$1" in
-    .env|.dev.vars|credentials|.git-credentials) rc=0 ;;
-    .netrc|_netrc|.npmrc|.pypirc|.htpasswd) rc=0 ;;
-    id_rsa|id_ed25519|id_ecdsa|id_dsa) rc=0 ;;
-    .env.*|.dev.vars.*) rc=0 ;;
-    *.pem|*.key|*.p12|*.pfx|*.jks|*.keystore) rc=0 ;;
-  esac
+  for entry in "${SECRET_NAMES[@]}" "${SECRET_FAMILIES[@]}"; do
+    case "$1" in "$entry") rc=0; break ;; esac
+  done
+  if [ "$rc" -ne 0 ]; then
+    for entry in "${SECRET_FAMILIES[@]}"; do
+      case "$1" in "$entry".*) rc=0; break ;; esac
+    done
+  fi
+  if [ "$rc" -ne 0 ]; then
+    for entry in "${SECRET_EXTS[@]}"; do
+      case "$1" in *."$entry") rc=0; break ;; esac
+    done
+  fi
   shopt -u nocasematch
   return $rc
 }
 
 # The same list as literal tokens, for the fuzzy glob comparison in rule 2.
-SECRET_TOKENS=(
-  .env .dev.vars credentials .git-credentials
-  .netrc _netrc .npmrc .pypirc .htpasswd
-  id_rsa id_ed25519 id_ecdsa id_dsa
-  .pem .key .p12 .pfx .jks .keystore
-)
+SECRET_TOKENS=("${SECRET_FAMILIES[@]}" "${SECRET_NAMES[@]}")
+for _ext in "${SECRET_EXTS[@]}"; do SECRET_TOKENS+=(".$_ext"); done
+unset _ext
 
 # Directories whose whole contents are secret. Used only by rule 5.
 is_secret_dir_component() {
@@ -152,8 +175,30 @@ is_secret_glob() {
 #
 # Public certificate names are filtered out of the matches afterwards, not in
 # the pattern: ERE has no negative lookahead.
-_DOTNAME='\.env(\.[A-Za-z0-9_.-]+)?|\.dev\.vars(\.[A-Za-z0-9_.-]+)?|\.aws/credentials|\.git-credentials|\.netrc|\.npmrc|\.pypirc|\.htpasswd'
-_TOKENNAME='id_(rsa|ed25519|ecdsa|dsa)|_netrc|[A-Za-z0-9_.-]+\.(pem|key|p12|pfx|jks|keystore)'
+# Both fragments are built from the list above, with parameter expansion only:
+# this file loads on every tool call, and each $(...) would cost a fork.
+# ERE escaping: a name holds letters, digits, "_", "-", "/", and ".", so only
+# the dot needs a backslash.
+_DOTNAME=""
+_TOKENNAME=""
+for _n in "${SECRET_FAMILIES[@]}"; do
+  _DOTNAME="${_DOTNAME:+$_DOTNAME|}${_n//./\\.}(\\.[A-Za-z0-9_.-]+)?"
+done
+for _n in "${SECRET_NAMES[@]}"; do
+  if [ "$_n" = "$SECRET_PROSE_NAME" ]; then
+    _n="$SECRET_PROSE_ANCHOR$_n"
+    _DOTNAME="${_DOTNAME:+$_DOTNAME|}${_n//./\\.}"
+  else
+    case "$_n" in
+      .*) _DOTNAME="${_DOTNAME:+$_DOTNAME|}${_n//./\\.}" ;;
+      *)  _TOKENNAME="${_TOKENNAME:+$_TOKENNAME|}${_n//./\\.}" ;;
+    esac
+  fi
+done
+_exts=""
+for _n in "${SECRET_EXTS[@]}"; do _exts="${_exts:+$_exts|}$_n"; done
+_TOKENNAME="${_TOKENNAME:+$_TOKENNAME|}[A-Za-z0-9_.-]+\\.(${_exts})"
+unset _n _exts
 # Bash gets the wide form: _TOKENNAME needs no leading "/", so "cat
 # private.key" and "ssh-keygen -f id_rsa" are caught. A Bash payload is a
 # command, so a bare "<word>.key" in it is almost always a real file.
