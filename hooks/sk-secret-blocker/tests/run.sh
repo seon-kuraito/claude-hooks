@@ -7,6 +7,13 @@
 #   allow-*.json  must print no decision at all
 #
 # Every case must exit 0: this hook never blocks by exit code, only by JSON.
+#
+# The shell-trap group depends on the environment, so each case runs in a fixed
+# one, never in the runner's own:
+#
+#   SHELL is /bin/zsh, or /bin/bash when the name holds "-bashshell-"
+#   SK_TOOLUSE_OFF is "shelltrap" when the name holds "-off-shelltrap-"
+#   HOME is an empty temp directory, so the user's own .off file is not read
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,6 +21,8 @@ hook="$dir/../hook.sh"
 
 pass=0
 fail=0
+home="$(mktemp -d)"
+trap 'rm -rf "$home"' EXIT
 
 for fixture in "$dir"/fixtures/*.json; do
   name="$(basename "$fixture")"
@@ -24,7 +33,9 @@ for fixture in "$dir"/fixtures/*.json; do
     *) echo "SKIP  $name — name must start with deny- or allow-"; continue ;;
   esac
 
-  out=$(< "$fixture" bash "$hook" 2>/dev/null)
+  case "$name" in *-bashshell-*) shell=/bin/bash ;; *) shell=/bin/zsh ;; esac
+  case "$name" in *-off-shelltrap-*) off=shelltrap ;; *) off="" ;; esac
+  out=$(< "$fixture" HOME="$home" SHELL="$shell" SK_TOOLUSE_OFF="$off" bash "$hook" 2>/dev/null)
   code=$?
   decision=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // ""' 2>/dev/null)
 

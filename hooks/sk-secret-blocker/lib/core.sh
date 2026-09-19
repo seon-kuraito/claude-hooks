@@ -20,22 +20,23 @@ trim_hit() {
   printf '%s' "$1" | sed -E -e 's#^[^A-Za-z0-9_./-]+##' -e 's#[^A-Za-z0-9_./-]+$##'
 }
 
-# Block the call and tell Claude what to do instead of hunting for a way round.
-deny() {
-  jq -n --arg tool "$TOOL_NAME" --arg target "$(shorten "$1")" '{
+# Block the call with reason $1. Each rule group writes its own reason, because
+# the advice differs: a secret hit says "do not retry", a shell trap says
+# "rewrite it like this and send it again".
+deny_with() {
+  jq -n --arg reason "$1" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: (
-        "sk-secret-blocker blocked this " + $tool + " call: \"" + $target
-        + "\" matches a secret-file pattern (.env family, private key, credential store). "
-        + "Opening it would copy live secrets into the transcript, where they stay for the rest of the session. "
-        + "Do not retry and do not route around this. Ask the user for the field name or value you need; "
-        + "if the access is genuinely required, ask them to disable this hook for the session."
-      )
+      permissionDecisionReason: $reason
     }
   }'
   exit 0
+}
+
+# Block the call and tell Claude what to do instead of hunting for a way round.
+deny() {
+  deny_with "$HOOK_NAME blocked this $TOOL_NAME call: \"$(shorten "$1")\" matches a secret-file pattern (.env family, private key, credential store). Opening it would copy live secrets into the transcript, where they stay for the rest of the session. Do not retry and do not route around this. Ask the user for the field name or value you need; if the access is genuinely required, ask them to disable this hook for the session."
 }
 
 # Walk every match of regex $2 in text $1, skipping public certificate names.

@@ -37,12 +37,36 @@ TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 [ -n "$TOOL_NAME" ] || exit 0
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_NAME="${HOOK_DIR##*/}"
+
+# A rule group can be switched off on its own: name it in SK_TOOLUSE_OFF, or in
+# the file ~/.claude/<hook-name>.off (names separated by spaces, commas, or
+# lines). Only the low-stakes groups listen. The secret group has no switch: a
+# one-line file that turns the guard off is a switch Claude could flip itself,
+# so the only way round it stays the visible one — disable the hook.
+RULES_OFF="${SK_TOOLUSE_OFF:-}"
+if [ -r "$HOME/.claude/$HOOK_NAME.off" ]; then
+  IFS= read -r -d '' _off_file < "$HOME/.claude/$HOOK_NAME.off" || true
+  RULES_OFF="$RULES_OFF ${_off_file:-}"
+fi
+RULES_OFF=" ${RULES_OFF//[,$'\n'$'\t']/ } "
+rule_is_on() {
+  case "$RULES_OFF" in *" $1 "*) return 1 ;; esac
+  return 0
+}
+
 # shellcheck source=lib/core.sh
 . "$HOOK_DIR/lib/core.sh" 2>/dev/null || exit 0
 # shellcheck source=rules/secret.sh
 . "$HOOK_DIR/rules/secret.sh" 2>/dev/null || exit 0
 
-# The secret-file rules always run first.
+# The secret-file rules always run first, and nothing below can stop them: a
+# rule group that fails to load is skipped, never fatal.
 secret_check
+
+# shellcheck source=rules/shelltrap.sh
+if rule_is_on shelltrap && . "$HOOK_DIR/rules/shelltrap.sh" 2>/dev/null; then
+  shelltrap_check
+fi
 
 exit 0
