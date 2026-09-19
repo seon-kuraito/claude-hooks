@@ -52,6 +52,35 @@ for fixture in "$dir"/fixtures/*.json; do
   pass=$((pass + 1))
 done
 
+# The block log: one line per deny, in the isolated HOME, five tab-separated fields.
+log="$home/.claude/logs/$(basename "$(dirname "$dir")").log"
+denies=$(find "$dir/fixtures" -name 'deny-*.json' | wc -l | tr -d ' ')
+lines=$( [ -f "$log" ] && wc -l < "$log" | tr -d ' ' || echo 0 )
+bad=$( [ -f "$log" ] && awk -F '\t' 'NF != 5' "$log" | wc -l | tr -d ' ' || echo 0 )
+if [ "$lines" = "$denies" ] && [ "$bad" = 0 ]; then
+  pass=$((pass + 1))
+else
+  echo "FAIL  block log — $lines lines for $denies denies, $bad malformed"
+  fail=$((fail + 1))
+fi
+
+# A rule file that does not load: the hook passes, exits 0, and says so.
+copy="$(mktemp -d)"
+cp -R "$dir/.." "$copy/hook"
+printf 'if then fi ((\n' >> "$copy/hook/rules/secret.sh"
+probe="$(find "$dir/fixtures" -name 'deny-read-*.json' | head -1)"
+out=$(< "$probe" HOME="$home" SHELL=/bin/zsh bash "$copy/hook/hook.sh" 2>/dev/null)
+code=$?
+decision=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // ""' 2>/dev/null)
+message=$(printf '%s' "$out" | jq -r '.systemMessage // ""' 2>/dev/null)
+rm -rf "$copy"
+if [ "$code" -eq 0 ] && [ -z "$decision" ] && [ -n "$message" ]; then
+  pass=$((pass + 1))
+else
+  echo "FAIL  broken rule file — exit $code, decision \"${decision:-none}\", message \"${message:-none}\""
+  fail=$((fail + 1))
+fi
+
 echo "---"
 echo "pass: $pass   fail: $fail"
 [ "$fail" -eq 0 ]

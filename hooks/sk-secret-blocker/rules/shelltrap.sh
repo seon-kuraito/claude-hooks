@@ -57,7 +57,7 @@ shelltrap_check() {
     if [ "$depth" = "0" ] && [ "$pos" = "cmd" ]; then
       case "$word" in
         cd|pushd|popd)
-          deny_with "$HOOK_NAME blocked this Bash call: a top-level \`$word\` moves the working directory of the whole session — every later command and every subagent starts there. Rewrite it and send it again: wrap the step in a subshell, ( cd <dir> && <command> ), or use git -C <dir>, or absolute paths."
+          deny_with shelltrap "$word" "$HOOK_NAME blocked this Bash call: a top-level \`$word\` moves the working directory of the whole session — every later command and every subagent starts there. Rewrite it and send it again: wrap the step in a subshell, ( cd <dir> && <command> ), or use git -C <dir>, or absolute paths."
           ;;
       esac
     fi
@@ -65,7 +65,7 @@ shelltrap_check() {
     case "$word" in
       =\(*|=) ;;
       =?*)
-        deny_with "$HOOK_NAME blocked this Bash call: the word \"$(shorten "$word")\" starts with \"=\", and zsh expands =word to a command path, so the call stops with \"not found\". Rewrite it and send it again: quote the word ('$(shorten "$word")'), use a single = inside [ ], or use [[ ... ]]."
+        deny_with shelltrap "$word" "$HOOK_NAME blocked this Bash call: the word \"$(shorten "$word")\" starts with \"=\", and zsh expands =word to a command path, so the call stops with \"not found\". Rewrite it and send it again: quote the word ('$(shorten "$word")'), use a single = inside [ ], or use [[ ... ]]."
         ;;
     esac
 
@@ -74,7 +74,7 @@ shelltrap_check() {
         hit=0
         case "$word" in path=*) [ "$pos" = "cmd" ] && hit=1 ;; esac
         case "$prev" in for|select|local|typeset|declare|export|read|-r) hit=1 ;; esac
-        [ "$hit" = 1 ] && deny_with "$HOOK_NAME blocked this Bash call: it uses \`path\` as a variable name, which zsh ties to PATH — the search path is lost and the next command is \"not found\". Rewrite it with another variable name, such as file or dir, and send it again."
+        [ "$hit" = 1 ] && deny_with shelltrap "$word" "$HOOK_NAME blocked this Bash call: it uses \`path\` as a variable name, which zsh ties to PATH — the search path is lost and the next command is \"not found\". Rewrite it with another variable name, such as file or dir, and send it again."
         ;;
     esac
 

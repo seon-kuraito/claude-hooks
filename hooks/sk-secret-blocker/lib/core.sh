@@ -20,11 +20,24 @@ trim_hit() {
   printf '%s' "$1" | sed -E -e 's#^[^A-Za-z0-9_./-]+##' -e 's#[^A-Za-z0-9_./-]+$##'
 }
 
-# Block the call with reason $1. Each rule group writes its own reason, because
-# the advice differs: a secret hit says "do not retry", a shell trap says
-# "rewrite it like this and send it again".
+# Block the call. Each rule group writes its own reason, because the advice
+# differs: a secret hit says "do not retry", a shell trap says "rewrite it like
+# this and send it again".
+#
+# Usage: deny_with <group> <target> <reason>. Before the decision is printed,
+# one line goes to the block log — time, group, tool, main or subagent, target —
+# so false blocks can be counted later. The log sits outside every repo, in
+# ~/.claude/logs/<hook-name>.log, the place every hook's log goes. A log that
+# cannot be written changes nothing: the decision never depends on it.
 deny_with() {
-  jq -n --arg reason "$1" '{
+  local log origin
+  log="${SK_TOOLUSE_LOG:-$HOME/.claude/logs/$HOOK_NAME.log}"
+  origin=$(printf '%s' "$INPUT" | jq -r 'if (.agent_id // "") == "" then "main" else "subagent" end' 2>/dev/null)
+  {
+    mkdir -p "${log%/*}" &&
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$1" "$TOOL_NAME" "${origin:-main}" "$(shorten "$2")" >> "$log"
+  } 2>/dev/null || true
+  jq -n --arg reason "$3" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
@@ -36,7 +49,7 @@ deny_with() {
 
 # Block the call and tell Claude what to do instead of hunting for a way round.
 deny() {
-  deny_with "$HOOK_NAME blocked this $TOOL_NAME call: \"$(shorten "$1")\" matches a secret-file pattern (.env family, private key, credential store). Opening it would copy live secrets into the transcript, where they stay for the rest of the session. Do not retry and do not route around this. Ask the user for the field name or value you need; if the access is genuinely required, ask them to disable this hook for the session."
+  deny_with secret "$1" "$HOOK_NAME blocked this $TOOL_NAME call: \"$(shorten "$1")\" matches a secret-file pattern (.env family, private key, credential store). Opening it would copy live secrets into the transcript, where they stay for the rest of the session. Do not retry and do not route around this. Ask the user for the field name or value you need; if the access is genuinely required, ask them to disable this hook for the session."
 }
 
 # Walk every match of regex $2 in text $1, skipping public certificate names.
@@ -49,6 +62,7 @@ deny_on_match() {
     hit=$(trim_hit "$raw")
     [ -n "$hit" ] || continue
     is_public_cert "${hit##*/}" && continue
+    is_env_object "${hit##*/}" && continue
     deny "$hit"
   done <<< "$(printf '%s' "$1" | grep -Eio "$2" 2>/dev/null)"
 }

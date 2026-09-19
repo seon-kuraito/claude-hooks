@@ -22,6 +22,18 @@ is_public_cert() {
   return $rc
 }
 
+# "env" is also an extension (prod.env, staging.env). In a command string the
+# same shape names a JavaScript object, not a file: process.env,
+# import.meta.env. Those are filtered out of the matches, like the public
+# certificate names above. "process.env.FOO" never matches at all — the regex
+# wants a boundary after the extension, and "." is not one.
+is_env_object() {
+  case "$1" in
+    process.env|import.meta.env|meta.env|Deno.env|Bun.env) return 0 ;;
+  esac
+  return 1
+}
+
 # Template files. Exempt for WRITE tools only — see the dispatch below.
 is_example_name() {
   local rc=1
@@ -59,7 +71,7 @@ SECRET_NAMES=(
   id_rsa id_ed25519 id_ecdsa id_dsa
 )
 SECRET_FAMILIES=(.env .dev.vars)
-SECRET_EXTS=(pem key p12 pfx jks keystore)
+SECRET_EXTS=(pem key p12 pfx jks keystore env)
 
 # A bare name that is ordinary prose in a command string ("grep -rn credentials
 # src/" must keep working). In a command it only counts under this directory.

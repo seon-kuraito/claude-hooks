@@ -19,7 +19,8 @@
 # PreToolUse only by contract: hookEventName below is hardcoded, so reusing this
 # script on another event would emit a block Claude Code silently ignores.
 #
-# Fails open (exit 0) on a missing jq, empty stdin, or unparseable input.
+# Fails open (exit 0) on a missing jq, a rule file that does not load, empty
+# stdin, or unparseable input — the first two with a warning to the user.
 # Failing closed would deny every single tool call. A hook is not a hard
 # boundary; pair it with permission rules where a guarantee is needed.
 #
@@ -31,13 +32,21 @@ set -uo pipefail
 
 INPUT=$(cat)
 
-command -v jq >/dev/null 2>&1 || exit 0
-
-TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-[ -n "$TOOL_NAME" ] || exit 0
+# Fail open, but never in silence: a guard that is off must say so. The warning
+# is static JSON, so it needs no jq. It carries no decision, only a message the
+# user sees on every matched tool call until the cause is fixed.
+warn_off() {
+  printf '{"systemMessage":"%s is OFF: %s. Tool calls pass unchecked until this is fixed."}\n' "${HOOK_NAME:-this hook}" "$1"
+  exit 0
+}
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_NAME="${HOOK_DIR##*/}"
+
+command -v jq >/dev/null 2>&1 || warn_off "jq is not installed"
+
+TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+[ -n "$TOOL_NAME" ] || exit 0
 
 # A rule group can be switched off on its own: name it in SK_TOOLUSE_OFF, or in
 # the file ~/.claude/<hook-name>.off (names separated by spaces, commas, or
@@ -56,9 +65,9 @@ rule_is_on() {
 }
 
 # shellcheck source=lib/core.sh
-. "$HOOK_DIR/lib/core.sh" 2>/dev/null || exit 0
+. "$HOOK_DIR/lib/core.sh" 2>/dev/null || warn_off "lib/core.sh did not load"
 # shellcheck source=rules/secret.sh
-. "$HOOK_DIR/rules/secret.sh" 2>/dev/null || exit 0
+. "$HOOK_DIR/rules/secret.sh" 2>/dev/null || warn_off "rules/secret.sh did not load"
 
 # The secret-file rules always run first, and nothing below can stop them: a
 # rule group that fails to load is skipped, never fatal.
