@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat >> notes.md <<'EOF'\ncd inside the body\n=== a ruler line\npath=/nowhere\nEOF"
+  }
+}

@@ -1,35 +1,8 @@
 #!/usr/bin/env bash
 #
-# sk-secret-blocker — PreToolUse guard. Any tool call that touches a secret
-# file (the .env family, private keys, credential stores) is denied before it
-# runs, and Claude is told why.
-#
-# Output contract: exit 0 with structured JSON, permissionDecision "deny".
-# "deny" is the only decision Claude Code guarantees in every permission mode —
-# the docs state it holds even under bypassPermissions and
-# --dangerously-skip-permissions. "ask" carries no such guarantee, and a hook
-# returning "ask" has been reported to override permissions.deny rules
-# (anthropics/claude-code#39344). The escape hatch for a legitimate need is to
-# disable this hook for that session, not to weaken the decision.
-#
-# A denial is not a dead end: Claude Code hands permissionDecisionReason back to
-# Claude as the tool error, so it can adjust and keep going. (continueOnBlock is
-# a prompt/agent hook field; a command hook neither needs nor accepts it.)
-#
-# PreToolUse only by contract: hookEventName below is hardcoded, so reusing this
-# script on another event would emit a block Claude Code silently ignores.
-#
-# Fails open (exit 0) on a missing jq, empty stdin, or unparseable input.
-# Failing closed would deny every single tool call. A hook is not a hard
-# boundary; pair it with permission rules where a guarantee is needed.
-set -uo pipefail
-
-INPUT=$(cat)
-
-command -v jq >/dev/null 2>&1 || exit 0
-
-TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-[ -n "$TOOL_NAME" ] || exit 0
+# rules/secret.sh — the secret-file rule group: the allowlists, the one list of
+# secret names, the matchers built on it, and the per-tool dispatch.
+# Sourced by hook.sh after lib/core.sh; defines functions and constants only.
 
 # ---------------------------------------------------------------------------
 # The allowlist — checked first, so it wins over every rule below.
@@ -47,6 +20,18 @@ is_public_cert() {
   esac
   shopt -u nocasematch
   return $rc
+}
+
+# "env" is also an extension (prod.env, staging.env). In a command string the
+# same shape names a JavaScript object, not a file: process.env,
+# import.meta.env. Those are filtered out of the matches, like the public
+# certificate names above. "process.env.FOO" never matches at all — the regex
+# wants a boundary after the extension, and "." is not one.
+is_env_object() {
+  case "$1" in
+    process.env|import.meta.env|meta.env|Deno.env|Bun.env) return 0 ;;
+  esac
+  return 1
 }
 
 # Template files. Exempt for WRITE tools only — see the dispatch below.
@@ -73,31 +58,54 @@ is_example_name() {
 # Matching is case-insensitive throughout. macOS APFS is case-insensitive by
 # default, so ".ENV" and ".SSH/ID_RSA" open the real files.
 # ---------------------------------------------------------------------------
+# The list itself — the ONLY place a name is written. Everything else (the
+# basename matcher, the glob tokens, the two command-string regexes) is built
+# from these three arrays when the file loads.
+#
+#   SECRET_NAMES     exact basenames
+#   SECRET_FAMILIES  exact basenames that also cover "<name>.<anything>"
+#   SECRET_EXTS      extensions: "<stem>.<ext>"
+SECRET_NAMES=(
+  credentials .git-credentials
+  .netrc _netrc .npmrc .pypirc .htpasswd
+  id_rsa id_ed25519 id_ecdsa id_dsa
+)
+SECRET_FAMILIES=(.env .dev.vars)
+SECRET_EXTS=(pem key p12 pfx jks keystore env)
+
+# A bare name that is ordinary prose in a command string ("grep -rn credentials
+# src/" must keep working). In a command it only counts under this directory.
+SECRET_PROSE_NAME=credentials
+SECRET_PROSE_ANCHOR=.aws/
+
 is_secret_basename() {
-  local rc=1
+  local rc=1 entry
   is_public_cert "$1" && return 1
   # bash 3.2 runs these glob patterns in O(n^2). A pathological string must
   # never reach them, or the hook stalls the session for minutes.
   [ "${#1}" -le 4096 ] || return 1
   shopt -s nocasematch
-  case "$1" in
-    .env|.dev.vars|credentials|.git-credentials) rc=0 ;;
-    .netrc|_netrc|.npmrc|.pypirc|.htpasswd) rc=0 ;;
-    id_rsa|id_ed25519|id_ecdsa|id_dsa) rc=0 ;;
-    .env.*|.dev.vars.*) rc=0 ;;
-    *.pem|*.key|*.p12|*.pfx|*.jks|*.keystore) rc=0 ;;
-  esac
+  for entry in "${SECRET_NAMES[@]}" "${SECRET_FAMILIES[@]}"; do
+    case "$1" in "$entry") rc=0; break ;; esac
+  done
+  if [ "$rc" -ne 0 ]; then
+    for entry in "${SECRET_FAMILIES[@]}"; do
+      case "$1" in "$entry".*) rc=0; break ;; esac
+    done
+  fi
+  if [ "$rc" -ne 0 ]; then
+    for entry in "${SECRET_EXTS[@]}"; do
+      case "$1" in *."$entry") rc=0; break ;; esac
+    done
+  fi
   shopt -u nocasematch
   return $rc
 }
 
 # The same list as literal tokens, for the fuzzy glob comparison in rule 2.
-SECRET_TOKENS=(
-  .env .dev.vars credentials .git-credentials
-  .netrc _netrc .npmrc .pypirc .htpasswd
-  id_rsa id_ed25519 id_ecdsa id_dsa
-  .pem .key .p12 .pfx .jks .keystore
-)
+SECRET_TOKENS=("${SECRET_FAMILIES[@]}" "${SECRET_NAMES[@]}")
+for _ext in "${SECRET_EXTS[@]}"; do SECRET_TOKENS+=(".$_ext"); done
+unset _ext
 
 # Directories whose whole contents are secret. Used only by rule 5.
 is_secret_dir_component() {
@@ -179,8 +187,30 @@ is_secret_glob() {
 #
 # Public certificate names are filtered out of the matches afterwards, not in
 # the pattern: ERE has no negative lookahead.
-_DOTNAME='\.env(\.[A-Za-z0-9_.-]+)?|\.dev\.vars(\.[A-Za-z0-9_.-]+)?|\.aws/credentials|\.git-credentials|\.netrc|\.npmrc|\.pypirc|\.htpasswd'
-_TOKENNAME='id_(rsa|ed25519|ecdsa|dsa)|_netrc|[A-Za-z0-9_.-]+\.(pem|key|p12|pfx|jks|keystore)'
+# Both fragments are built from the list above, with parameter expansion only:
+# this file loads on every tool call, and each $(...) would cost a fork.
+# ERE escaping: a name holds letters, digits, "_", "-", "/", and ".", so only
+# the dot needs a backslash.
+_DOTNAME=""
+_TOKENNAME=""
+for _n in "${SECRET_FAMILIES[@]}"; do
+  _DOTNAME="${_DOTNAME:+$_DOTNAME|}${_n//./\\.}(\\.[A-Za-z0-9_.-]+)?"
+done
+for _n in "${SECRET_NAMES[@]}"; do
+  if [ "$_n" = "$SECRET_PROSE_NAME" ]; then
+    _n="$SECRET_PROSE_ANCHOR$_n"
+    _DOTNAME="${_DOTNAME:+$_DOTNAME|}${_n//./\\.}"
+  else
+    case "$_n" in
+      .*) _DOTNAME="${_DOTNAME:+$_DOTNAME|}${_n//./\\.}" ;;
+      *)  _TOKENNAME="${_TOKENNAME:+$_TOKENNAME|}${_n//./\\.}" ;;
+    esac
+  fi
+done
+_exts=""
+for _n in "${SECRET_EXTS[@]}"; do _exts="${_exts:+$_exts|}$_n"; done
+_TOKENNAME="${_TOKENNAME:+$_TOKENNAME|}[A-Za-z0-9_.-]+\\.(${_exts})"
+unset _n _exts
 # Bash gets the wide form: _TOKENNAME needs no leading "/", so "cat
 # private.key" and "ssh-keygen -f id_rsa" are caught. A Bash payload is a
 # command, so a bare "<word>.key" in it is almost always a real file.
@@ -190,55 +220,6 @@ SECRET_RE="(^|[^A-Za-z0-9_.-])(${_DOTNAME})($|[^A-Za-z0-9_-])|(^|[^A-Za-z0-9_.-]
 # There _TOKENNAME keeps the leading "/" requirement; _DOTNAME is unchanged, so
 # a pasted "/home/u/.env" is still caught.
 SECRET_RE_STRICT="(^|[^A-Za-z0-9_.-])(${_DOTNAME})($|[^A-Za-z0-9_-])|/(${_TOKENNAME})($|[^A-Za-z0-9_./-])"
-
-# Keep the reason readable, and never let tool input steer it with control
-# characters — this text is what explains the block.
-shorten() {
-  local s
-  s=$(printf '%s' "$1" | tr -d '\000-\037')
-  if [ "${#s}" -gt 120 ]; then
-    printf '%s…' "${s:0:120}"
-  else
-    printf '%s' "$s"
-  fi
-}
-
-# Trim the boundary characters the regex consumed around a match.
-trim_hit() {
-  printf '%s' "$1" | sed -E -e 's#^[^A-Za-z0-9_./-]+##' -e 's#[^A-Za-z0-9_./-]+$##'
-}
-
-# Block the call and tell Claude what to do instead of hunting for a way round.
-deny() {
-  jq -n --arg tool "$TOOL_NAME" --arg target "$(shorten "$1")" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: (
-        "sk-secret-blocker blocked this " + $tool + " call: \"" + $target
-        + "\" matches a secret-file pattern (.env family, private key, credential store). "
-        + "Opening it would copy live secrets into the transcript, where they stay for the rest of the session. "
-        + "Do not retry and do not route around this. Ask the user for the field name or value you need; "
-        + "if the access is genuinely required, ask them to disable this hook for the session."
-      )
-    }
-  }'
-  exit 0
-}
-
-# Walk every match of regex $2 in text $1, skipping public certificate names.
-# Every match is examined, not just the first: "openssl x509 -in fullchain.pem"
-# must stay allowed even when a later token on the same line is a real secret.
-deny_on_match() {
-  local raw hit
-  while IFS= read -r raw; do
-    [ -n "$raw" ] || continue
-    hit=$(trim_hit "$raw")
-    [ -n "$hit" ] || continue
-    is_public_cert "${hit##*/}" && continue
-    deny "$hit"
-  done <<< "$(printf '%s' "$1" | grep -Eio "$2" 2>/dev/null)"
-}
 
 # Rule 3 exception — jq filters. A jq filter cannot open a file, so a field path
 # inside one (".licenseInfo.key") is data, not a secret file, and matching it
@@ -323,75 +304,62 @@ mask_jq_filters() {
   printf '%s' "${toks[*]}"
 }
 
-# Pull every string out of the fields named by $2 and test each with matcher $1.
-scan() {
-  local matcher filter target targets
-  matcher="$1"
-  filter="$2"
-  targets=$(printf '%s' "$INPUT" | jq -r "$filter | map(select(type == \"string\")) | .[]" 2>/dev/null)
-  [ -n "$targets" ] || return 0
-  while IFS= read -r target; do
-    [ -n "$target" ] || continue
-    if "$matcher" "$target"; then
-      deny "$target"
-    fi
-  done <<< "$targets"
+# The secret-file rules, per tool. Called by hook.sh; a hit never returns —
+# deny prints the decision and exits 0.
+secret_check() {
+  case "$TOOL_NAME" in
+    Read)
+      scan is_secret_path '[.tool_input.file_path?, .tool_input.notebook_path?]'
+      ;;
+    Edit|Write|NotebookEdit)
+      scan is_secret_path_written '[.tool_input.file_path?, .tool_input.notebook_path?]'
+      ;;
+    Glob)
+      scan is_secret_path '[.tool_input.path?]'
+      scan is_secret_glob '[.tool_input.pattern?]'
+      ;;
+    Grep)
+      # .pattern is a regex, not a path. Matching it would deny an honest search
+      # for "\.env" through source code, so it stays out of scope on purpose.
+      scan is_secret_path '[.tool_input.path?]'
+      scan is_secret_glob '[.tool_input.glob?]'
+      # Rule 5 — a content-mode search over a directory of secrets returns the
+      # secret bodies with no secret FILENAME anywhere in tool_input, so the four
+      # rules above cannot see it. Only content mode leaks; the default
+      # files_with_matches returns names, not lines.
+      if [ "$(printf '%s' "$INPUT" | jq -r '.tool_input.output_mode // empty' 2>/dev/null)" = "content" ]; then
+        scan is_secret_dir_component '[.tool_input.path?]'
+      fi
+      ;;
+    Bash)
+      COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+      [ -n "$COMMAND" ] && deny_on_match "$(mask_jq_filters "$COMMAND")" "$SECRET_RE"
+      ;;
+    TodoWrite)
+      # The matcher regex is unanchored, so "Write" matches TodoWrite. A todo that
+      # merely mentions a secret path touches no file — never block one.
+      return 0
+      ;;
+    *)
+      # MCP tools (mcp__<server>__<tool>), plus anything else the unanchored
+      # matcher lets through. Their argument field names are not knowable, so walk
+      # every string in tool_input. This branch also watches content leave the
+      # machine: a secret path pasted into a remote page trips it like a local read.
+      #
+      # Cost discipline matters here — payloads can be megabytes. One grep pass
+      # over the whole payload does the regex work, and the O(n^2) glob matcher
+      # only ever sees short, whitespace-free, path-shaped strings.
+      VALUES=$(printf '%s' "$INPUT" | jq -r '(.tool_input // {}) | [.. | (objects | keys[]), strings] | .[]' 2>/dev/null)
+      if [ -n "$VALUES" ]; then
+        deny_on_match "$VALUES" "$SECRET_RE_STRICT"
+        while IFS= read -r VALUE; do
+          case "$VALUE" in ''|*[[:space:]]*) continue ;; esac
+          [ "${#VALUE}" -le 512 ] || continue
+          if is_secret_path "$VALUE"; then
+            deny "$VALUE"
+          fi
+        done <<< "$VALUES"
+      fi
+      ;;
+  esac
 }
-
-case "$TOOL_NAME" in
-  Read)
-    scan is_secret_path '[.tool_input.file_path?, .tool_input.notebook_path?]'
-    ;;
-  Edit|Write|NotebookEdit)
-    scan is_secret_path_written '[.tool_input.file_path?, .tool_input.notebook_path?]'
-    ;;
-  Glob)
-    scan is_secret_path '[.tool_input.path?]'
-    scan is_secret_glob '[.tool_input.pattern?]'
-    ;;
-  Grep)
-    # .pattern is a regex, not a path. Matching it would deny an honest search
-    # for "\.env" through source code, so it stays out of scope on purpose.
-    scan is_secret_path '[.tool_input.path?]'
-    scan is_secret_glob '[.tool_input.glob?]'
-    # Rule 5 — a content-mode search over a directory of secrets returns the
-    # secret bodies with no secret FILENAME anywhere in tool_input, so the four
-    # rules above cannot see it. Only content mode leaks; the default
-    # files_with_matches returns names, not lines.
-    if [ "$(printf '%s' "$INPUT" | jq -r '.tool_input.output_mode // empty' 2>/dev/null)" = "content" ]; then
-      scan is_secret_dir_component '[.tool_input.path?]'
-    fi
-    ;;
-  Bash)
-    COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
-    [ -n "$COMMAND" ] && deny_on_match "$(mask_jq_filters "$COMMAND")" "$SECRET_RE"
-    ;;
-  TodoWrite)
-    # The matcher regex is unanchored, so "Write" matches TodoWrite. A todo that
-    # merely mentions a secret path touches no file — never block one.
-    exit 0
-    ;;
-  *)
-    # MCP tools (mcp__<server>__<tool>), plus anything else the unanchored
-    # matcher lets through. Their argument field names are not knowable, so walk
-    # every string in tool_input. This branch also watches content leave the
-    # machine: a secret path pasted into a remote page trips it like a local read.
-    #
-    # Cost discipline matters here — payloads can be megabytes. One grep pass
-    # over the whole payload does the regex work, and the O(n^2) glob matcher
-    # only ever sees short, whitespace-free, path-shaped strings.
-    VALUES=$(printf '%s' "$INPUT" | jq -r '(.tool_input // {}) | [.. | (objects | keys[]), strings] | .[]' 2>/dev/null)
-    if [ -n "$VALUES" ]; then
-      deny_on_match "$VALUES" "$SECRET_RE_STRICT"
-      while IFS= read -r VALUE; do
-        case "$VALUE" in ''|*[[:space:]]*) continue ;; esac
-        [ "${#VALUE}" -le 512 ] || continue
-        if is_secret_path "$VALUE"; then
-          deny "$VALUE"
-        fi
-      done <<< "$VALUES"
-    fi
-    ;;
-esac
-
-exit 0

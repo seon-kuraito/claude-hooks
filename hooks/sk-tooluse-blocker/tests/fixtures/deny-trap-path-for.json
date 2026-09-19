@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "for path in a b; do echo \"$path\"; done"
+  }
+}
