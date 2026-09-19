@@ -11,7 +11,7 @@
 | hook | 用途 | 來源 |
 | --- | --- | --- |
 | [`sk-task-notifier`](hooks/sk-task-notifier) | 在回合結束或等待介入時發送 macOS 桌面通知 | 原創 |
-| [`sk-tooluse-blocker`](hooks/sk-tooluse-blocker) | 在工具執行前拒絕不該執行的呼叫：碰到祕密檔案，或使用 zsh 必定出錯的 shell 寫法 | 原創 |
+| [`sk-tooluse-blocker`](hooks/sk-tooluse-blocker) | 在工具執行前拒絕存取祕密檔案的呼叫，以及在 zsh 中必定出錯的 shell 指令 | 原創 |
 
 　
 
