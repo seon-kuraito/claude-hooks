@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/sk-secret-blocker/hook.sh",
+            "command": "~/.claude/hooks/sk-tooluse-blocker/hook.sh",
             "timeout": 5
           }
         ]

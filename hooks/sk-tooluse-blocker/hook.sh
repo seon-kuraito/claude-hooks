@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 #
-# sk-secret-blocker — PreToolUse guard. Any tool call that touches a secret
-# file (the .env family, private keys, credential stores) is denied before it
-# runs, and Claude is told why.
+# sk-tooluse-blocker — PreToolUse guard. A tool call that should not run is
+# denied before it runs, and Claude is told why. Two rule groups:
+#
+#   secret     any tool call that touches a secret file (the .env family,
+#              private keys, credential stores)
+#   shelltrap  a Bash command spelled in a way zsh always gets wrong (a
+#              top-level cd, a word that starts with "=", `path` as a variable)
 #
 # Output contract: exit 0 with structured JSON, permissionDecision "deny".
 # "deny" is the only decision Claude Code guarantees in every permission mode —
