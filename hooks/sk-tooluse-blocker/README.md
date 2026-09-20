@@ -88,6 +88,12 @@
   2. 在頂層 `hooks` 下加入 `PreToolUse`，matcher 為 `Read|Edit|Write|NotebookEdit|Glob|Grep|Bash|mcp__.*`
   3. 該項目的 `command` 指向 `~/.claude/hooks/sk-tooluse-blocker/hook.sh`，並設 `timeout` 為 `5`
   4. 完整宣告見 repo 的 [`settings.hooks.json`](../../settings.hooks.json)，可直接複製或合併至既有設定
+- **從 `sk-secret-blocker` 升級**：
+  - 此 hook 原名為 `sk-secret-blocker`。由於 `settings.json` 中的 `command` 路徑包含目錄名稱，改名後需手動更新設定
+  1. 執行 `scripts/link-hook.sh sk-tooluse-blocker` 建立新名稱的連結
+  2. 將 `settings.json` 中的 `command` 路徑改為 `~/.claude/hooks/sk-tooluse-blocker/hook.sh`；執行中的 session 會立即套用新設定
+  3. 將舊連結指向新目錄，使改名前啟動的 session 繼續套用此 hook：`ln -sfn <repo>/hooks/sk-tooluse-blocker ~/.claude/hooks/sk-secret-blocker`
+  4. 待改名前啟動的 session 全部結束後，移除 `~/.claude/hooks/sk-secret-blocker`
 
 　
 
@@ -195,3 +201,11 @@
   - 環境變數本身（例如：`printenv`、`env`）不在攔截範圍內
 - **hook 仍需搭配 permission 規則**：
   - matcher 與 `if` 會 fail open；如需強制限制，仍應搭配 permission 規則
+  - 在 `settings.json` 的 `permissions.deny` 中，加入與祕密檔案清單對應的 `Read` 規則，例如 `Read(//**/.env)` 與 `Read(~/.aws/credentials)`。完整規則由 [`deny-rules.sh`](deny-rules.sh) 根據 [`rules/secret.sh`](rules/secret.sh) 使用的同一份清單產生；執行時加上 `--json`，即可輸出能直接貼入設定的陣列
+  - `scripts/link-hook.sh` 建立連結後會執行 [`install.sh`](install.sh)。此腳本僅讀取 `settings.json`，並回報 hook 是否已註冊、缺少哪些建議的 `deny` 規則，以及是否存在以 `**/` 開頭而無法涵蓋工作目錄以外路徑的規則
+  - 若需涵蓋工作目錄以外的路徑，樣式必須以 `//**/` 開頭。`Read(**/.env)` 以 session 的工作目錄為基準，實測不會阻擋該目錄以外的檔案
+  - `deny` 規則不支援例外，因此不應加入 `*.pem`，以免同時阻擋白名單中的公開憑證。由於 `credentials` 也是一般英文字，規則僅列入 `~/.aws/credentials`
+  - 根據[官方文件](https://code.claude.com/docs/en/permissions#read-and-edit)，`Read` 的 `deny` 規則適用於內建讀檔工具、同一路徑上的 `Edit` 與 `Write`（包含建立新檔），以及 Claude Code 可辨識的 Bash 檔案指令（例如 `cat`、`head`、`tail`、`sed`、`tee`）和重新導向目標
+  - `Read(//**/.env.*)` 也會阻擋 `.env.example` 等範例檔的寫入。hook 會放行範例檔的寫入，因此兩層規則在此情況下的行為不同
+  - `deny` 規則與 hook 均無法辨識未指定檔名的指令（例如在檔案所在目錄執行 `grep -r pattern .`），或由子程序自行開啟檔案的操作（例如 Python 或 Node 腳本）。如需作業系統層級的強制限制，官方建議啟用 [sandbox](https://code.claude.com/docs/en/sandboxing)
+  - hook 通常會先於 `deny` 規則拒絕相同的檔名，因此無法從一般操作確認 `deny` 規則是否生效。驗證時可暫時加入僅由 `deny` 層處理的規則（例如：`Read(//**/*.zzprobe)`），再讀取對應的測試檔。預期訊息為「File is in a directory that is denied by your permission settings」。完成驗證後，移除規則與測試檔
