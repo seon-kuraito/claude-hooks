@@ -123,6 +123,58 @@ check_install complete "$wired" "every recommended permissions.deny rule is pres
 check_install empty '{}' "recommended permissions.deny rule(s) missing" "ok: registered"
 check_install weak '{"permissions":{"deny":["Read(**/.env)"]}}' "relative to the working directory" "ok: every"
 
+# Everything below runs in throwaway directories and leaves nothing behind.
+decision_of() { printf '%s' "$1" | jq -r '.hookSpecificOutput.permissionDecision // ""' 2>/dev/null; }
+reason_of()   { printf '%s' "$1" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null; }
+expect() {   # <label> <ok: 0 or 1>
+  if [ "$2" = 0 ]; then pass=$((pass + 1)); else echo "FAIL  $1"; fail=$((fail + 1)); fi
+}
+hook_name="$(basename "$(dirname "$dir")")"
+trap_fx="$dir/fixtures/deny-trap-cd-bare.json"
+secret_fx="$(find "$dir/fixtures" -name 'deny-read-*.json' | head -1)"
+
+# The off FILE (the fixtures above only use the environment variable): with
+# "shelltrap" in ~/.claude/<hook-name>.off the trap passes and the secret rule
+# still denies; a file that names the secret group changes nothing.
+off_home="$(mktemp -d)"
+mkdir -p "$off_home/.claude"
+printf 'shelltrap\n' > "$off_home/.claude/$hook_name.off"
+out=$(< "$trap_fx" HOME="$off_home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+[ -z "$(decision_of "$out")" ]; expect "off file — shelltrap listed, the trap must pass" $?
+out=$(< "$secret_fx" HOME="$off_home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+[ "$(decision_of "$out")" = deny ]; expect "off file — shelltrap listed, a secret read must still be denied" $?
+printf 'secret, shelltrap\n' > "$off_home/.claude/$hook_name.off"
+out=$(< "$secret_fx" HOME="$off_home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+[ "$(decision_of "$out")" = deny ]; expect "off file — the secret group has no switch" $?
+rm -rf "$off_home"
+
+# No jq: a PATH that holds cat and dirname and nothing else. The hook must exit 0,
+# make no decision, and warn through systemMessage (static JSON, read here with
+# the real jq).
+bare="$(mktemp -d)"
+for tool in cat dirname; do ln -s "$(command -v "$tool")" "$bare/$tool"; done
+bash_bin="$(command -v bash)"
+out=$(< "$secret_fx" HOME="$home" SHELL=/bin/zsh PATH="$bare" "$bash_bin" "$hook" 2>/dev/null)
+code=$?
+rm -rf "$bare"
+[ "$code" -eq 0 ] && [ -z "$(decision_of "$out")" ] &&
+  printf '%s' "$out" | jq -e '.systemMessage | test("jq is not installed")' > /dev/null 2>&1
+expect "no jq — exit 0, no decision, and a warning that names jq" $?
+
+# The reason text is the fix Claude is given, so it is part of the contract.
+out=$(< "$trap_fx" HOME="$home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+case "$(reason_of "$out")" in *"( cd <dir> && <command> )"*"git -C"*) ok=0 ;; *) ok=1 ;; esac
+expect "reason — a cd denial carries the subshell and git -C rewrites" $ok
+out=$(< "$dir/fixtures/deny-trap-equals-echo.json" HOME="$home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+case "$(reason_of "$out")" in *"quote the word"*) ok=0 ;; *) ok=1 ;; esac
+expect "reason — an equals-word denial says to quote the word" $ok
+out=$(< "$dir/fixtures/deny-trap-path-for.json" HOME="$home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+case "$(reason_of "$out")" in *"another variable name"*) ok=0 ;; *) ok=1 ;; esac
+expect "reason — a path denial says to use another variable name" $ok
+out=$(< "$secret_fx" HOME="$home" SHELL=/bin/zsh bash "$hook" 2>/dev/null)
+case "$(reason_of "$out")" in *"Do not retry"*) ok=0 ;; *) ok=1 ;; esac
+expect "reason — a secret denial says not to retry" $ok
+
 echo "---"
 echo "pass: $pass   fail: $fail"
 [ "$fail" -eq 0 ]
