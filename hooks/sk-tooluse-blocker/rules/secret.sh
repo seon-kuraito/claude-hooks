@@ -73,6 +73,11 @@ SECRET_NAMES=(
 SECRET_FAMILIES=(.env .dev.vars)
 SECRET_EXTS=(pem key p12 pfx jks keystore env)
 
+# Extensions that is_public_cert carves an allowlist into. The hook can block
+# the family and still let the public names through; a permissions.deny rule
+# cannot — it has no exception — so deny-rules.sh leaves these extensions out.
+SECRET_EXTS_ALLOWLISTED=(pem)
+
 # A bare name that is ordinary prose in a command string ("grep -rn credentials
 # src/" must keep working). In a command it only counts under this directory.
 SECRET_PROSE_NAME=credentials
