@@ -81,6 +81,48 @@ else
   fail=$((fail + 1))
 fi
 
+# deny-rules.sh: every line is anchored, the dot-env name is there, the
+# allowlisted extension is not, the prose name appears only under its anchor, and
+# --json holds the same number of rules.
+tool="$dir/../deny-rules.sh"
+rules="$(bash "$tool" 2>/dev/null)"
+count=$(printf '%s\n' "$rules" | grep -c .)
+json_count=$(bash "$tool" --json 2>/dev/null | jq 'length' 2>/dev/null)
+if [ "$count" -gt 0 ] &&
+  [ "$(printf '%s\n' "$rules" | grep -v -c -E '^Read\((//\*\*/|~/)')" = 0 ] &&
+  printf '%s\n' "$rules" | grep -q -F -x 'Read(//**/.env)' &&
+  printf '%s\n' "$rules" | grep -q -F -x 'Read(~/.aws/credentials)' &&
+  ! printf '%s\n' "$rules" | grep -q -F '*.pem' &&
+  ! printf '%s\n' "$rules" | grep -q -F -x 'Read(//**/credentials)' &&
+  [ "$(printf '%s\n' "$rules" | sort | uniq -d | grep -c .)" = 0 ] &&
+  [ "$json_count" = "$count" ]; then
+  pass=$((pass + 1))
+else
+  echo "FAIL  deny-rules.sh — $count rules, $json_count in --json, or a rule has the wrong shape"
+  fail=$((fail + 1))
+fi
+
+# install.sh reads and reports, against three throwaway settings files.
+check_install() {   # <label> <settings json> <text the report must hold> <text it must not hold>
+  local file out
+  file="$home/settings-$1.json"
+  printf '%s' "$2" > "$file"
+  out="$(SETTINGS_FILE="$file" bash "$dir/../install.sh" 2>&1)"
+  if [ $? -eq 0 ] && printf '%s' "$out" | grep -q -F "$3" && ! printf '%s' "$out" | grep -q -F "$4"; then
+    pass=$((pass + 1))
+  else
+    echo "FAIL  install.sh ($1) — report was: $(printf '%s' "$out" | head -3 | tr '\n' '|')"
+    fail=$((fail + 1))
+  fi
+  [ "$(cat "$file")" = "$2" ] || { echo "FAIL  install.sh ($1) — it changed the settings file"; fail=$((fail + 1)); }
+}
+name="$(basename "$(dirname "$dir")")"
+all="$(bash "$tool" --json 2>/dev/null)"
+wired="{\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"~/.claude/hooks/$name/hook.sh\"}]}]},\"permissions\":{\"deny\":$all}}"
+check_install complete "$wired" "every recommended permissions.deny rule is present" "TODO"
+check_install empty '{}' "recommended permissions.deny rule(s) missing" "ok: registered"
+check_install weak '{"permissions":{"deny":["Read(**/.env)"]}}' "relative to the working directory" "ok: every"
+
 echo "---"
 echo "pass: $pass   fail: $fail"
 [ "$fail" -eq 0 ]
