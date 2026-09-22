@@ -16,7 +16,8 @@
 # Left out on purpose:
 #   - heredoc bodies: the lines between <<WORD and WORD are data, not commands;
 #   - comments: from an unquoted "#" at the start of a word to the line's end;
-#   - the inside of [[ ... ]]: zsh does not expand "=word" there.
+#   - the inside of [[ ... ]]: zsh does not expand "=word" there;
+#   - the name in a function definition, `name()`: it defines, it does not run.
 #
 # This is not a shell parser. It is built to fail in the quiet direction: what
 # it cannot place, it leaves out, so a rule misses a trap and never invents one.
@@ -87,6 +88,10 @@ BEGIN { depth = 0; at_cmd = 1; in_test = 0; word = ""; quote = ""; heredoc = "";
 
     if (c == "$" && substr(line, i + 1, 1) == "(") { word = word "$"; continue }
     if (c == "(") {
+      # "name()" opens a function definition: drop the name, skip the ")",
+      # and let the body's first word start a command. "$()" and "=()" are
+      # not names and fall through to the substitution rule below.
+      if (word != "" && word !~ /[$=]$/ && substr(line, i + 1, 1) == ")") { word = ""; i++; at_cmd = 1; continue }
       # "=(" opens a zsh process substitution, "$(" a command substitution;
       # both nest like a subshell. The "=" or "$" is dropped with the word.
       if (word == "=" || word == "$" || word ~ /[$=]$/) word = ""

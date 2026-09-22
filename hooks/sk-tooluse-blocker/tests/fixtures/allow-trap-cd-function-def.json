@@ -1,0 +1,6 @@
+{
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cd() { echo blocked; return 1; }; echo ok"
+  }
+}

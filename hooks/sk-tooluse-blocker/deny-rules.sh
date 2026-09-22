@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # deny-rules.sh — print the `permissions.deny` rules that pair with this hook,
-# built from the same secret list the hook itself reads (rules/secret.sh). A
+# built from the same secret list the hook itself reads (rules/secret-list.sh).
+# A
 # hook fails open; these rules are the layer the harness enforces by itself.
 #
 #   deny-rules.sh          one rule per line
@@ -34,8 +35,8 @@
 set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=rules/secret.sh
-. "$here/rules/secret.sh" || { echo "deny-rules.sh: rules/secret.sh did not load" >&2; exit 1; }
+# shellcheck source=rules/secret-list.sh
+. "$here/rules/secret-list.sh" || { echo "deny-rules.sh: rules/secret-list.sh did not load" >&2; exit 1; }
 
 rules=()
 for name in "${SECRET_FAMILIES[@]}"; do

@@ -1,87 +1,8 @@
 #!/usr/bin/env bash
 #
-# rules/secret.sh — the secret-file rule group: the allowlists, the one list of
-# secret names, the matchers built on it, and the per-tool dispatch.
-# Sourced by hook.sh after lib/core.sh; defines functions and constants only.
-
-# ---------------------------------------------------------------------------
-# The allowlist — checked first, so it wins over every rule below.
-#
-# These are the standard names a certificate toolchain gives the PUBLIC half of
-# a TLS pair (Let's Encrypt and friends). They are not secrets, and .pem covers
-# both halves, so without this list all TLS work would be unreachable.
-# privkey.pem and every other *.pem stay blocked.
-# ---------------------------------------------------------------------------
-is_public_cert() {
-  local rc=1
-  shopt -s nocasematch
-  case "$1" in
-    cert.pem|fullchain.pem|chain.pem|ca.pem|cacert.pem|ca-bundle.pem) rc=0 ;;
-  esac
-  shopt -u nocasematch
-  return $rc
-}
-
-# "env" is also an extension (prod.env, staging.env). In a command string the
-# same shape names a JavaScript object, not a file: process.env,
-# import.meta.env. Those are filtered out of the matches, like the public
-# certificate names above. "process.env.FOO" never matches at all — the regex
-# wants a boundary after the extension, and "." is not one.
-is_env_object() {
-  case "$1" in
-    process.env|import.meta.env|meta.env|Deno.env|Bun.env) return 0 ;;
-  esac
-  return 1
-}
-
-# Template files. Exempt for WRITE tools only — see the dispatch below.
-is_example_name() {
-  local rc=1
-  shopt -s nocasematch
-  case "$1" in
-    *.example|*.sample|*.template) rc=0 ;;
-  esac
-  shopt -u nocasematch
-  return $rc
-}
-
-# ---------------------------------------------------------------------------
-# The secret-file list — one list, shared by every rule below.
-#
-# The bar for an entry: the filename on its own is near-certain to mean a
-# secret. Deliberately out of scope for that reason: .envrc, .environment,
-# terraform.tfvars, secrets.* — each is ordinary config often enough that
-# adding it would buy coverage with daily friction.
-#
-# id_rsa.pub is not matched: the entries are exact, so the public half is free.
-#
-# Matching is case-insensitive throughout. macOS APFS is case-insensitive by
-# default, so ".ENV" and ".SSH/ID_RSA" open the real files.
-# ---------------------------------------------------------------------------
-# The list itself — the ONLY place a name is written. Everything else (the
-# basename matcher, the glob tokens, the two command-string regexes) is built
-# from these three arrays when the file loads.
-#
-#   SECRET_NAMES     exact basenames
-#   SECRET_FAMILIES  exact basenames that also cover "<name>.<anything>"
-#   SECRET_EXTS      extensions: "<stem>.<ext>"
-SECRET_NAMES=(
-  credentials .git-credentials
-  .netrc _netrc .npmrc .pypirc .htpasswd
-  id_rsa id_ed25519 id_ecdsa id_dsa
-)
-SECRET_FAMILIES=(.env .dev.vars)
-SECRET_EXTS=(pem key p12 pfx jks keystore env)
-
-# Extensions that is_public_cert carves an allowlist into. The hook can block
-# the family and still let the public names through; a permissions.deny rule
-# cannot — it has no exception — so deny-rules.sh leaves these extensions out.
-SECRET_EXTS_ALLOWLISTED=(pem)
-
-# A bare name that is ordinary prose in a command string ("grep -rn credentials
-# src/" must keep working). In a command it only counts under this directory.
-SECRET_PROSE_NAME=credentials
-SECRET_PROSE_ANCHOR=.aws/
+# rules/secret.sh — the secret-file rule group: the matchers built on the list
+# in rules/secret-list.sh, and the per-tool dispatch. Sourced by hook.sh after
+# that file; defines functions and derived constants only.
 
 is_secret_basename() {
   local rc=1 entry
@@ -89,7 +10,6 @@ is_secret_basename() {
   # bash 3.2 runs these glob patterns in O(n^2). A pathological string must
   # never reach them, or the hook stalls the session for minutes.
   [ "${#1}" -le 4096 ] || return 1
-  shopt -s nocasematch
   for entry in "${SECRET_NAMES[@]}" "${SECRET_FAMILIES[@]}"; do
     case "$1" in "$entry") rc=0; break ;; esac
   done
@@ -103,7 +23,6 @@ is_secret_basename() {
       case "$1" in *."$entry") rc=0; break ;; esac
     done
   fi
-  shopt -u nocasematch
   return $rc
 }
 
@@ -115,13 +34,11 @@ unset _ext
 # Directories whose whole contents are secret. Used only by rule 5.
 is_secret_dir_component() {
   local rest="$1" part rc=1
-  shopt -s nocasematch
   while [ -n "$rest" ]; do
     part="${rest%%/*}"
     case "$part" in .ssh|.aws|.gnupg) rc=0; break ;; esac
     case "$rest" in */*) rest="${rest#*/}" ;; *) rest="" ;; esac
   done
-  shopt -u nocasematch
   return $rc
 }
 
@@ -167,12 +84,10 @@ is_secret_glob() {
   core="${core//\{/}"
   core="${core//\}/}"
   [ "${#core}" -ge 4 ] || return 1
-  shopt -s nocasematch
   for token in "${SECRET_TOKENS[@]}"; do
     case "$token" in *"$core"*) rc=0; break ;; esac
     case "$core" in *"$token"*) rc=0; break ;; esac
   done
-  shopt -u nocasematch
   return $rc
 }
 
@@ -226,92 +141,13 @@ SECRET_RE="(^|[^A-Za-z0-9_.-])(${_DOTNAME})($|[^A-Za-z0-9_-])|(^|[^A-Za-z0-9_.-]
 # a pasted "/home/u/.env" is still caught.
 SECRET_RE_STRICT="(^|[^A-Za-z0-9_.-])(${_DOTNAME})($|[^A-Za-z0-9_-])|/(${_TOKENNAME})($|[^A-Za-z0-9_./-])"
 
-# Rule 3 exception — jq filters. A jq filter cannot open a file, so a field path
-# inside one (".licenseInfo.key") is data, not a secret file, and matching it
-# would deny an honest "gh api ... --jq '.licenseInfo.key'". Before the Bash
-# match, blank the filter arguments only: the value of gh's --jq, and jq's first
-# positional argument — unless -f / --from-file turns that argument into a file.
-# jq's input files and its --slurpfile / --rawfile values are never blanked.
-#
-# The command is split on whitespace and on | ; & ( ) outside quotes. That is
-# enough to find those arguments, but it is not a shell parser, so it fails in
-# the safe direction: a command with no "jq" in it, or longer than 4096
-# characters, passes through unchanged, and an argument the split cannot place
-# stays in the scanned text — a gap can leave a false positive, never hide a file.
-mask_jq_filters() {
-  local cmd="$1" n="${#1}" i=0 c tok="" state="" t base
-  local in_jq=0 skip=0 want_gh=0 idx=0 cnt
-  local -a toks=()
-  case "$cmd" in *jq*) ;; *) printf '%s' "$cmd"; return ;; esac
-  [ "$n" -le 4096 ] || { printf '%s' "$cmd"; return; }
-
-  while [ "$i" -lt "$n" ]; do
-    c="${cmd:$i:1}"
-    if [ "$state" = "'" ]; then
-      tok="$tok$c"
-      [ "$c" = "'" ] && state=""
-    elif [ "$state" = '"' ]; then
-      tok="$tok$c"
-      if [ "$c" = '\' ]; then
-        i=$((i + 1))
-        tok="$tok${cmd:$i:1}"
-      elif [ "$c" = '"' ]; then
-        state=""
-      fi
-    else
-      case "$c" in
-        "'"|'"') tok="$tok$c"; state="$c" ;;
-        ' '|$'\t'|$'\n') [ -n "$tok" ] && toks+=("$tok"); tok="" ;;
-        '|'|';'|'&'|'('|')') [ -n "$tok" ] && toks+=("$tok"); tok=""; toks+=("$c") ;;
-        *) tok="$tok$c" ;;
-      esac
-    fi
-    i=$((i + 1))
-  done
-  [ -n "$tok" ] && toks+=("$tok")
-  cnt="${#toks[@]}"
-  [ "$cnt" -gt 0 ] || { printf '%s' "$cmd"; return; }
-
-  while [ "$idx" -lt "$cnt" ]; do
-    t="${toks[$idx]}"
-    case "$t" in
-      '|'|';'|'&'|'('|')')
-        in_jq=0; skip=0; want_gh=0
-        ;;
-      *)
-        if [ "$want_gh" = 1 ]; then
-          toks[$idx]="''"
-          want_gh=0
-        elif [ "$in_jq" = 1 ]; then
-          if [ "$skip" -gt 0 ]; then
-            skip=$((skip - 1))
-          else
-            case "$t" in
-              --arg|--argjson|--slurpfile|--rawfile) skip=2 ;;
-              --indent|-L|--library-path) skip=1 ;;
-              -f|--from-file) in_jq=0 ;;
-              --*) ;;
-              -?*) case "$t" in *f*) in_jq=0 ;; esac ;;
-              *) toks[$idx]="''"; in_jq=0 ;;
-            esac
-          fi
-        else
-          case "$t" in
-            --jq) want_gh=1 ;;
-            --jq=*) toks[$idx]="--jq=''" ;;
-            *) base="${t##*/}"; [ "$base" = jq ] && { in_jq=1; skip=0; } ;;
-          esac
-        fi
-        ;;
-    esac
-    idx=$((idx + 1))
-  done
-  printf '%s' "${toks[*]}"
-}
-
 # The secret-file rules, per tool. Called by hook.sh; a hit never returns —
 # deny prints the decision and exits 0.
 secret_check() {
+  # Every matcher below compares case-insensitively (see rules/secret-list.sh).
+  # One bracket here instead of a toggle in each function; a hit exits inside
+  # deny, so only the pass path reaches the closing shopt.
+  shopt -s nocasematch
   case "$TOOL_NAME" in
     Read)
       scan is_secret_path '[.tool_input.file_path?, .tool_input.notebook_path?]'
@@ -343,7 +179,6 @@ secret_check() {
     TodoWrite)
       # The matcher regex is unanchored, so "Write" matches TodoWrite. A todo that
       # merely mentions a secret path touches no file — never block one.
-      return 0
       ;;
     *)
       # MCP tools (mcp__<server>__<tool>), plus anything else the unanchored
@@ -367,4 +202,5 @@ secret_check() {
       fi
       ;;
   esac
+  shopt -u nocasematch
 }

@@ -64,22 +64,25 @@ else
   fail=$((fail + 1))
 fi
 
-# A rule file that does not load: the hook passes, exits 0, and says so.
-copy="$(mktemp -d)"
-cp -R "$dir/.." "$copy/hook"
-printf 'if then fi ((\n' >> "$copy/hook/rules/secret.sh"
+# A sourced file that does not load: the hook passes, exits 0, and says so.
+# One run per file hook.sh sources with a warn_off of its own.
 probe="$(find "$dir/fixtures" -name 'deny-read-*.json' | head -1)"
-out=$(< "$probe" HOME="$home" SHELL=/bin/zsh bash "$copy/hook/hook.sh" 2>/dev/null)
-code=$?
-decision=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // ""' 2>/dev/null)
-message=$(printf '%s' "$out" | jq -r '.systemMessage // ""' 2>/dev/null)
-rm -rf "$copy"
-if [ "$code" -eq 0 ] && [ -z "$decision" ] && [ -n "$message" ]; then
-  pass=$((pass + 1))
-else
-  echo "FAIL  broken rule file — exit $code, decision \"${decision:-none}\", message \"${message:-none}\""
-  fail=$((fail + 1))
-fi
+for broken in lib/jqmask.sh rules/secret-list.sh rules/secret.sh; do
+  copy="$(mktemp -d)"
+  cp -R "$dir/.." "$copy/hook"
+  printf 'if then fi ((\n' >> "$copy/hook/$broken"
+  out=$(< "$probe" HOME="$home" SHELL=/bin/zsh bash "$copy/hook/hook.sh" 2>/dev/null)
+  code=$?
+  decision=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // ""' 2>/dev/null)
+  message=$(printf '%s' "$out" | jq -r '.systemMessage // ""' 2>/dev/null)
+  rm -rf "$copy"
+  if [ "$code" -eq 0 ] && [ -z "$decision" ] && [ -n "$message" ]; then
+    pass=$((pass + 1))
+  else
+    echo "FAIL  broken $broken — exit $code, decision \"${decision:-none}\", message \"${message:-none}\""
+    fail=$((fail + 1))
+  fi
+done
 
 # deny-rules.sh: every line is anchored, the dot-env name is there, the
 # allowlisted extension is not, the prose name appears only under its anchor, and

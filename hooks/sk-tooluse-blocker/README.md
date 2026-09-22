@@ -63,7 +63,7 @@
 - **拒絕紀錄**：
   - 在 `~/.claude/logs/sk-tooluse-blocker.log` 追加一行：時間、規則組、工具、來自主 session 或 subagent、命中的目標（截短至 120 個字元）
 - **實作結構**：
-  - [`hook.sh`](hook.sh) 只負責載入與分派；共用工具見 [`lib/core.sh`](lib/core.sh)，指令斷詞見 [`lib/tokens.awk`](lib/tokens.awk)，兩組規則分別見 [`rules/secret.sh`](rules/secret.sh) 與 [`rules/shelltrap.sh`](rules/shelltrap.sh)
+  - [`hook.sh`](hook.sh) 負責載入與分派。共用工具位於 [`lib/core.sh`](lib/core.sh)，jq 遮蔽濾鏡位於 [`lib/jqmask.sh`](lib/jqmask.sh)，指令斷詞邏輯位於 [`lib/tokens.awk`](lib/tokens.awk)。祕密檔名清單定義於 [`rules/secret-list.sh`](rules/secret-list.sh)；兩組規則分別位於 [`rules/secret.sh`](rules/secret.sh) 與 [`rules/shelltrap.sh`](rules/shelltrap.sh)
 
 　
 
@@ -125,7 +125,7 @@
 - **降低誤擋範圍**：
   - `deny` 會直接阻止操作，因此規則採取較精確的比對條件；已知的公開檔案透過白名單處理，不放寬整個檔名家族
 - **集中維護祕密檔案清單**：
-  - 祕密檔名僅定義於 [`rules/secret.sh`](rules/secret.sh) 的 `SECRET_NAMES`、`SECRET_FAMILIES`、`SECRET_EXTS` 三個陣列；basename 比對、glob 使用的字面片段及兩條正規表達式均在載入時由這些陣列產生
+  - 祕密檔名統一定義於 [`rules/secret-list.sh`](rules/secret-list.sh) 的 `SECRET_NAMES`、`SECRET_FAMILIES`、`SECRET_EXTS` 三個陣列。載入時，程式會由這些陣列產生 basename 比對項目、glob 使用的字面片段及兩條正規表達式
   - 產生過程只使用參數展開，不開 subshell，因為這個檔案在每一次工具呼叫前都會載入
 - **`Grep` 的 `pattern` 不納入比對**：
   - 該欄位是正規表達式而非路徑，比對它會擋掉在程式碼裡搜尋 `\.env` 的正當需求
@@ -156,7 +156,7 @@
   - matcher 的正規表達式沒有錨定，`Write` 會連帶匹配到 `TodoWrite`
   - 待辦事項提到祕密檔案路徑並不會碰到檔案，不應該被擋
 - **失敗時放行並顯示警告**：
-  - `jq` 缺失，或 `lib/core.sh`、`rules/secret.sh` 載入失敗時 `exit 0`，同時以 `systemMessage` 告知使用者保護目前失效；這段訊息是寫死的 JSON，不需要 `jq`
+  - `jq` 缺失，或 `lib/core.sh`、`lib/jqmask.sh`、`rules/secret-list.sh`、`rules/secret.sh` 任一檔案載入失敗時，程式會以 `exit 0` 結束，並透過 `systemMessage` 告知使用者保護目前失效。此訊息使用固定的 JSON，不依賴 `jq`
   - stdin 為空或內容無法解析時同樣 `exit 0`
   - 若在失敗時拒絕，所有工具呼叫都會遭到阻擋，因此此處採用放行策略
   - 規則放在被載入的檔案裡還有一個理由：`hook.sh` 本身若有語法錯誤，bash 會以離開碼 2 結束，而 `PreToolUse` 會把它視為拒絕，所有符合 matcher 的工具都會被鎖住；載入失敗則只會放行
@@ -176,14 +176,14 @@
   - 需要 `jq`、`awk` 與 `bash`；腳本相容 macOS 內建的 bash 3.2
 - **不在範圍內的檔名**：
   - `.envrc`、`.environment`、`terraform.tfvars`、`secrets.*`、`.mcp.json` 不擋，因為它們常常只是一般設定
-  - 需要納入時，修改 [`rules/secret.sh`](rules/secret.sh) 的 `SECRET_NAMES`、`SECRET_FAMILIES` 或 `SECRET_EXTS`
+  - 如需納入其他檔名，修改 [`rules/secret-list.sh`](rules/secret-list.sh) 的 `SECRET_NAMES`、`SECRET_FAMILIES` 或 `SECRET_EXTS`
 - **範例檔只放行寫入**：
   - `Write`、`Edit`、`NotebookEdit` 遇到以 `.example`、`.sample`、`.template` 結尾的檔案時放行。`Write` 的內容由 Claude 產生，`Edit` 的 `old_string` 也必須先由其他來源取得，因此這些操作不會直接讀取祕密內容
   - `Read` 與其餘四條規則仍然攔下，因為真值被貼進範例檔是已知的外洩途徑
-  - 要改動範圍時，修改 [`rules/secret.sh`](rules/secret.sh) 的 `is_example_name`
+  - 如需調整放行範圍，修改 [`rules/secret-list.sh`](rules/secret-list.sh) 的 `is_example_name`
 - **公開憑證白名單**：
   - `*.pem` 同時涵蓋憑證鏈與私鑰，一律攔下會讓 TLS 相關工作整片讀不到，因此六個標準的公開憑證檔名放行
-  - `privkey.pem` 與其餘 `*.pem` 仍然攔下；要增減清單，修改 [`rules/secret.sh`](rules/secret.sh) 的 `is_public_cert`
+  - `privkey.pem` 與其餘 `*.pem` 仍會遭到攔截。如需調整清單，修改 [`rules/secret-list.sh`](rules/secret-list.sh) 的 `is_public_cert`
 - **已知的誤判**：
   - Bash 指令裡只要提到祕密檔案名就會被擋，即使它並未真的讀檔（例如：`echo ".env" >> .gitignore`、`git commit -m "fix config.key parsing"`）
   - 存放一般設定但以 `.env` 結尾的檔案同樣會被擋（例如：`defaults.env`）
@@ -201,7 +201,7 @@
   - 環境變數本身（例如：`printenv`、`env`）不在攔截範圍內
 - **hook 仍需搭配 permission 規則**：
   - matcher 與 `if` 會 fail open；如需強制限制，仍應搭配 permission 規則
-  - 在 `settings.json` 的 `permissions.deny` 中，加入與祕密檔案清單對應的 `Read` 規則，例如 `Read(//**/.env)` 與 `Read(~/.aws/credentials)`。完整規則由 [`deny-rules.sh`](deny-rules.sh) 根據 [`rules/secret.sh`](rules/secret.sh) 使用的同一份清單產生；執行時加上 `--json`，即可輸出能直接貼入設定的陣列
+  - 在 `settings.json` 的 `permissions.deny` 中加入與祕密檔案清單對應的 `Read` 規則，例如 `Read(//**/.env)` 與 `Read(~/.aws/credentials)`。[`deny-rules.sh`](deny-rules.sh) 會依據 [`rules/secret-list.sh`](rules/secret-list.sh) 的同一份清單產生完整規則；加上 `--json` 執行，即可輸出可直接貼入設定的陣列
   - `scripts/link-hook.sh` 建立連結後會執行 [`install.sh`](install.sh)。此腳本僅讀取 `settings.json`，並回報 hook 是否已註冊、缺少哪些建議的 `deny` 規則，以及是否存在以 `**/` 開頭而無法涵蓋工作目錄以外路徑的規則
   - 若需涵蓋工作目錄以外的路徑，樣式必須以 `//**/` 開頭。`Read(**/.env)` 以 session 的工作目錄為基準，實測不會阻擋該目錄以外的檔案
   - `deny` 規則不支援例外，因此不應加入 `*.pem`，以免同時阻擋白名單中的公開憑證。由於 `credentials` 也是一般英文字，規則僅列入 `~/.aws/credentials`
