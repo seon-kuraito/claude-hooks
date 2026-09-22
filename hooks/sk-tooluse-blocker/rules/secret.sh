@@ -10,7 +10,6 @@ is_secret_basename() {
   # bash 3.2 runs these glob patterns in O(n^2). A pathological string must
   # never reach them, or the hook stalls the session for minutes.
   [ "${#1}" -le 4096 ] || return 1
-  shopt -s nocasematch
   for entry in "${SECRET_NAMES[@]}" "${SECRET_FAMILIES[@]}"; do
     case "$1" in "$entry") rc=0; break ;; esac
   done
@@ -24,7 +23,6 @@ is_secret_basename() {
       case "$1" in *."$entry") rc=0; break ;; esac
     done
   fi
-  shopt -u nocasematch
   return $rc
 }
 
@@ -36,13 +34,11 @@ unset _ext
 # Directories whose whole contents are secret. Used only by rule 5.
 is_secret_dir_component() {
   local rest="$1" part rc=1
-  shopt -s nocasematch
   while [ -n "$rest" ]; do
     part="${rest%%/*}"
     case "$part" in .ssh|.aws|.gnupg) rc=0; break ;; esac
     case "$rest" in */*) rest="${rest#*/}" ;; *) rest="" ;; esac
   done
-  shopt -u nocasematch
   return $rc
 }
 
@@ -88,12 +84,10 @@ is_secret_glob() {
   core="${core//\{/}"
   core="${core//\}/}"
   [ "${#core}" -ge 4 ] || return 1
-  shopt -s nocasematch
   for token in "${SECRET_TOKENS[@]}"; do
     case "$token" in *"$core"*) rc=0; break ;; esac
     case "$core" in *"$token"*) rc=0; break ;; esac
   done
-  shopt -u nocasematch
   return $rc
 }
 
@@ -150,6 +144,10 @@ SECRET_RE_STRICT="(^|[^A-Za-z0-9_.-])(${_DOTNAME})($|[^A-Za-z0-9_-])|/(${_TOKENN
 # The secret-file rules, per tool. Called by hook.sh; a hit never returns —
 # deny prints the decision and exits 0.
 secret_check() {
+  # Every matcher below compares case-insensitively (see rules/secret-list.sh).
+  # One bracket here instead of a toggle in each function; a hit exits inside
+  # deny, so only the pass path reaches the closing shopt.
+  shopt -s nocasematch
   case "$TOOL_NAME" in
     Read)
       scan is_secret_path '[.tool_input.file_path?, .tool_input.notebook_path?]'
@@ -181,7 +179,6 @@ secret_check() {
     TodoWrite)
       # The matcher regex is unanchored, so "Write" matches TodoWrite. A todo that
       # merely mentions a secret path touches no file — never block one.
-      return 0
       ;;
     *)
       # MCP tools (mcp__<server>__<tool>), plus anything else the unanchored
@@ -205,4 +202,5 @@ secret_check() {
       fi
       ;;
   esac
+  shopt -u nocasematch
 }

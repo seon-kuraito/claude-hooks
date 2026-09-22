@@ -15,13 +15,10 @@
 # privkey.pem and every other *.pem stay blocked.
 # ---------------------------------------------------------------------------
 is_public_cert() {
-  local rc=1
-  shopt -s nocasematch
   case "$1" in
-    cert.pem|fullchain.pem|chain.pem|ca.pem|cacert.pem|ca-bundle.pem) rc=0 ;;
+    cert.pem|fullchain.pem|chain.pem|ca.pem|cacert.pem|ca-bundle.pem) return 0 ;;
   esac
-  shopt -u nocasematch
-  return $rc
+  return 1
 }
 
 # "env" is also an extension (prod.env, staging.env). In a command string the
@@ -38,13 +35,10 @@ is_env_object() {
 
 # Template files. Exempt for WRITE tools only — see the dispatch below.
 is_example_name() {
-  local rc=1
-  shopt -s nocasematch
   case "$1" in
-    *.example|*.sample|*.template) rc=0 ;;
+    *.example|*.sample|*.template) return 0 ;;
   esac
-  shopt -u nocasematch
-  return $rc
+  return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -58,7 +52,9 @@ is_example_name() {
 # id_rsa.pub is not matched: the entries are exact, so the public half is free.
 #
 # Matching is case-insensitive throughout. macOS APFS is case-insensitive by
-# default, so ".ENV" and ".SSH/ID_RSA" open the real files.
+# default, so ".ENV" and ".SSH/ID_RSA" open the real files. secret_check in
+# rules/secret.sh sets nocasematch once around the dispatch; no matcher here
+# or there toggles it itself.
 # ---------------------------------------------------------------------------
 # The list itself — the ONLY place a name is written. Everything else (the
 # basename matcher, the glob tokens, the two command-string regexes) is built
