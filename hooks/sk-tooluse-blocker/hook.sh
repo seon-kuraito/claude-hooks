@@ -30,8 +30,9 @@
 #
 # Layout: this file only loads and dispatches. lib/core.sh holds what the rule
 # groups share, lib/jqmask.sh the jq-filter parser the secret group uses, and
-# lib/tokens.awk the word splitter the shell traps use; rules/<group>.sh holds
-# one rule group each. A sourced file that
+# lib/tokens.awk the word splitter the shell traps use; rules/secret-list.sh
+# holds the one list of names, and rules/<group>.sh one rule group each. A
+# sourced file that
 # fails to load makes the hook pass, never block: a bash syntax error in THIS
 # file would exit 2, which PreToolUse reads as a block on every matched tool.
 set -uo pipefail
@@ -74,6 +75,8 @@ rule_is_on() {
 . "$HOOK_DIR/lib/core.sh" 2>/dev/null || warn_off "lib/core.sh did not load"
 # shellcheck source=lib/jqmask.sh
 . "$HOOK_DIR/lib/jqmask.sh" 2>/dev/null || warn_off "lib/jqmask.sh did not load"
+# shellcheck source=rules/secret-list.sh
+. "$HOOK_DIR/rules/secret-list.sh" 2>/dev/null || warn_off "rules/secret-list.sh did not load"
 # shellcheck source=rules/secret.sh
 . "$HOOK_DIR/rules/secret.sh" 2>/dev/null || warn_off "rules/secret.sh did not load"
 
