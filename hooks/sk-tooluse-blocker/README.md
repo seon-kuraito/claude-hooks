@@ -14,27 +14,27 @@
 
 　
 
-## 為什麼做這個 hook（WHY）
+## 設計背景（WHY）
 
-- **避免祕密內容進入對話紀錄**：
+- **祕密檔案會進入對話紀錄**：
   - 祕密檔案可能包含資料庫連線字串、API 金鑰或私鑰；檔案一旦讀入對話，內容就會保留在 transcript 中，直到 session 結束
-- **在模型之外執行限制**：
+- **模型可能忽略 CLAUDE.md 的規則**：
   - `CLAUDE.md` 的規則由模型判讀，在多步驟任務中可能遭到忽略；hook 由 harness 執行，不依賴模型判斷
-- **涵蓋各種檔案存取方式**：
+- **檔案存取途徑多樣**：
   - `Read` 以外，`cat`、`grep`、`sed` 等 Bash 指令及 `Glob` 搜尋也能取得檔案內容
-- **涵蓋常見的祕密檔案**：
+- **祕密檔案種類繁多**：
   - 除了 `.env`，也涵蓋 SSH 私鑰、`~/.aws/credentials`、`.npmrc` 中的 registry token 及憑證庫
-- **避免工作目錄延續至後續呼叫**：
+- **工作目錄會延續至後續呼叫**：
   - Bash 工具會沿用前一次呼叫的工作目錄。執行頂層 `cd` 後，後續指令與 subagent 都會從變更後的目錄開始
-- **避免 zsh 特有的指令錯誤**：
+- **部分指令在 zsh 下必定出錯**：
   - zsh 會把 `=` 開頭的字展開成指令路徑，`echo ===` 與 `[ "$a" == "$b" ]` 因此以「not found」中止
   - zsh 會將變數 `path` 綁定至 `PATH`；對 `path` 賦值會清空指令搜尋路徑，使後續指令無法解析
-- **避免 perl 單行腳本造成 CJK 亂碼**：
+- **perl 單行腳本會造成 CJK 亂碼**：
   - perl 會將 `-e` 腳本視為 Latin-1；腳本中的 CJK 字面值可能在輸出時變成亂碼，CJK 樣式也可能無法比對，且不會產生錯誤。若未提交的內容因此損毀，`git checkout` 無法還原原始內容
 
 　
 
-## 這個 hook 做什麼（WHAT）
+## 功能範圍（WHAT）
 
 - **攔截時機**：
   - `PreToolUse`，matcher 為 `Read|Edit|Write|NotebookEdit|Glob|Grep|Bash|mcp__.*`
@@ -46,7 +46,7 @@
   - 前綴家族：`.env.*`、`.dev.vars.*`
   - 後綴家族：`*.pem`、`*.key`、`*.p12`、`*.pfx`、`*.jks`、`*.keystore`、`*.env`
   - 祕密目錄：`.ssh`、`.aws`、`.gnupg`
-  - 白名單：`cert.pem`、`fullchain.pem`、`chain.pem`、`ca.pem`、`cacert.pem`、`ca-bundle.pem` 一律放行；指令字串中的 `process.env`、`import.meta.env`、`Deno.env`、`Bun.env` 視為程式物件，同樣放行
+  - 白名單：`cert.pem`、`fullchain.pem`、`chain.pem`、`ca.pem`、`cacert.pem`、`ca-bundle.pem` 均會放行；指令字串中的 `process.env`、`import.meta.env`、`Deno.env`、`Bun.env` 視為程式物件，同樣放行
 - **祕密檔案的五條判定規則**：
   - 具體路徑欄位（`file_path`、`notebook_path`、`path`）比對 basename；寫入類工具另對範例檔放行
   - glob 樣式欄位（`Glob` 的 `pattern`、`Grep` 的 `glob`）取最後一段做雙向比對
@@ -59,7 +59,7 @@
   - 把 `path` 當成變數名稱時拒絕（例如：`path=/tmp`、`for path in …`、`local path`、`read -r path`）
   - `perl -e`／`-pe`／`-ne` 的腳本含有非 ASCII 位元組時拒絕（例如：`perl -pe 's/舊詞/新詞/g'`）；此規則僅檢查 perl 指令中的字，`echo -e` 與 `sed -e` 不受影響；命令列含有 `-Mutf8`，或腳本內含有 `use utf8` 時放行
 - **比對不分大小寫**：
-  - macOS 的 APFS 預設不分大小寫，`.ENV` 與 `.SSH/ID_RSA` 打得開真正的檔案，因此祕密檔案的五條規則一律不分大小寫比對
+  - macOS 的 APFS 預設不分大小寫，`.ENV` 與 `.SSH/ID_RSA` 仍可開啟實際檔案，因此祕密檔案的五條規則均採不分大小寫的比對方式
 - **決定方式**：
   - 輸出 `permissionDecision: "deny"` 的結構化 JSON 並 `exit 0`，把理由傳給 Claude
   - 祕密檔案規則的理由會要求停止重試或規避；shell 陷阱規則則提供可接受的改寫方式，供修正後重新送出
@@ -70,7 +70,7 @@
 
 　
 
-## 如何使用這個 hook（HOW）
+## 使用方式（HOW）
 
 ### 安裝
 
@@ -112,7 +112,7 @@
 - **兩組規則放在同一個 hook**：
   - 多個 `PreToolUse` hook 之間只要有一個 `deny` 就算拒絕，一個 hook 無法撤銷另一個 hook 的決定，因此例外必須和它放寬的規則放在一起
   - 兩組規則共用同一次註冊、同一份紀錄與同一套測試；每組規則各自一個檔案，`hook.sh` 只負責載入與分派
-  - 祕密檔案規則一律先執行；shell 陷阱的規則檔載入失敗時只會略過該組，不影響祕密檔案規則
+  - 祕密檔案規則固定優先執行；shell 陷阱的規則檔載入失敗時只會略過該組，不影響祕密檔案規則
 - **兩組規則各自處理例外**：
   - shell 陷阱規則會排除引號內的文字、heredoc 內容、註解及 `[[ … ]]` 內部。例如，`echo "cd foo"` 不會變更工作目錄。這些情況由 [`lib/tokens.awk`](lib/tokens.awk) 統一處理
   - 祕密檔案規則不套用上述例外，因為 `cat ".env"` 仍會讀取檔案，heredoc 內容也可能直接交由直譯器執行
@@ -162,7 +162,7 @@
   - `jq` 缺失，或 `lib/core.sh`、`lib/jqmask.sh`、`rules/secret-list.sh`、`rules/secret.sh` 任一檔案載入失敗時，程式會以 `exit 0` 結束，並透過 `systemMessage` 告知使用者保護目前失效。此訊息使用固定的 JSON，不依賴 `jq`
   - stdin 為空或內容無法解析時同樣 `exit 0`
   - 若在失敗時拒絕，所有工具呼叫都會遭到阻擋，因此此處採用放行策略
-  - 規則放在被載入的檔案裡還有一個理由：`hook.sh` 本身若有語法錯誤，bash 會以離開碼 2 結束，而 `PreToolUse` 會把它視為拒絕，所有符合 matcher 的工具都會被鎖住；載入失敗則只會放行
+  - 規則放在被載入的檔案裡還有一個理由：`hook.sh` 本身若有語法錯誤，bash 會以離開碼 2 結束，而 `PreToolUse` 會把它視為拒絕，所有符合 matcher 的工具都會遭到拒絕；載入失敗時則會放行
 - **紀錄位置**：
   - 紀錄可能包含真實路徑，因此寫入 `~/.claude/logs/`，不存放於 hook 目錄；寫入失敗不影響規則判定
 - **fixture 測試**：
@@ -185,7 +185,7 @@
   - `Read` 與其餘四條規則仍然攔下，因為真值被貼進範例檔是已知的外洩途徑
   - 如需調整放行範圍，修改 [`rules/secret-list.sh`](rules/secret-list.sh) 的 `is_example_name`
 - **公開憑證白名單**：
-  - `*.pem` 同時涵蓋憑證鏈與私鑰，一律攔下會讓 TLS 相關工作整片讀不到，因此六個標準的公開憑證檔名放行
+  - `*.pem` 同時涵蓋憑證鏈與私鑰，若全部攔截，TLS 相關工作將無法讀取這些檔案，因此六個標準的公開憑證檔名放行
   - `privkey.pem` 與其餘 `*.pem` 仍會遭到攔截。如需調整清單，修改 [`rules/secret-list.sh`](rules/secret-list.sh) 的 `is_public_cert`
 - **已知的誤判**：
   - Bash 指令裡只要提到祕密檔案名就會被擋，即使它並未真的讀檔（例如：`echo ".env" >> .gitignore`、`git commit -m "fix config.key parsing"`）
