@@ -29,6 +29,8 @@
 - **避免 zsh 特有的指令錯誤**：
   - zsh 會把 `=` 開頭的字展開成指令路徑，`echo ===` 與 `[ "$a" == "$b" ]` 因此以「not found」中止
   - zsh 會將變數 `path` 綁定至 `PATH`；對 `path` 賦值會清空指令搜尋路徑，使後續指令無法解析
+- **避免 perl 單行腳本造成 CJK 亂碼**：
+  - perl 會將 `-e` 腳本視為 Latin-1；腳本中的 CJK 字面值可能在輸出時變成亂碼，CJK 樣式也可能無法比對，且不會產生錯誤。若未提交的內容因此損毀，`git checkout` 無法還原原始內容
 
 　
 
@@ -38,7 +40,7 @@
   - `PreToolUse`，matcher 為 `Read|Edit|Write|NotebookEdit|Glob|Grep|Bash|mcp__.*`
 - **兩組規則**：
   - 祕密檔案規則（`secret`）：適用於所有環境，執行順序固定在前
-  - shell 陷阱規則（`shelltrap`）：僅檢查 `Bash`，並在使用者的 shell 為 zsh 時生效
+  - shell 陷阱規則（`shelltrap`）：僅檢查 `Bash`；三條 zsh 陷阱僅在使用者的 shell 為 zsh 時生效，perl 陷阱則適用於任何 shell
 - **祕密檔案的判定清單**：
   - 完整檔名：`.env`、`.dev.vars`、`credentials`、`.git-credentials`、`.netrc`、`_netrc`、`.npmrc`、`.pypirc`、`.htpasswd`、`id_rsa`、`id_ed25519`、`id_ecdsa`、`id_dsa`
   - 前綴家族：`.env.*`、`.dev.vars.*`
@@ -51,10 +53,11 @@
   - `Bash` 的 `command` 字串分兩層比對，dotfile 需要前方邊界，裸名與後綴不需要
   - 其餘工具（含所有 MCP）掃描 `tool_input` 裡的每一個字串與物件鍵
   - `Grep` 在 `output_mode` 為 `content` 時，額外比對 `path` 的每一段是否為祕密目錄
-- **shell 陷阱的三條判定規則**：
+- **shell 陷阱的四條判定規則**：
   - 拒絕頂層的 `cd`、`pushd`、`popd`；若位於 `( … )` 或 `$( … )` 內則放行，因為工作目錄的變更會在 subshell 結束時失效
   - 不在引號內、以 `=` 開頭且長度至少兩個字元的字拒絕；`[[ … ]]` 之內與 `=( … )` 放行
   - 把 `path` 當成變數名稱時拒絕（例如：`path=/tmp`、`for path in …`、`local path`、`read -r path`）
+  - `perl -e`／`-pe`／`-ne` 的腳本含有非 ASCII 位元組時拒絕（例如：`perl -pe 's/舊詞/新詞/g'`）；此規則僅檢查 perl 指令中的字，`echo -e` 與 `sed -e` 不受影響；命令列含有 `-Mutf8`，或腳本內含有 `use utf8` 時放行
 - **比對不分大小寫**：
   - macOS 的 APFS 預設不分大小寫，`.ENV` 與 `.SSH/ID_RSA` 打得開真正的檔案，因此祕密檔案的五條規則一律不分大小寫比對
 - **決定方式**：
