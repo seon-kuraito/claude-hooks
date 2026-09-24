@@ -5,8 +5,9 @@
 #
 #   secret     any tool call that touches a secret file (the .env family,
 #              private keys, credential stores)
-#   shelltrap  a Bash command spelled in a way zsh always gets wrong (a
-#              top-level cd, a word that starts with "=", `path` as a variable)
+#   shelltrap  a Bash command spelled in a way that always goes wrong (a
+#              top-level cd, a word that starts with "=", `path` as a variable
+#              — zsh facts — and a perl -e script with text outside ASCII)
 #
 # Output contract: exit 0 with structured JSON, permissionDecision "deny".
 # "deny" is the only decision Claude Code guarantees in every permission mode —
