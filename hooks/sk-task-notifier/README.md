@@ -14,22 +14,22 @@
 
 　
 
-## 為什麼做這個 hook（WHY）
+## 設計背景（WHY）
 
-- **畫面離開就錯過**：
-  - Claude Code 結束回合、等待授權或需要輸入時，如果使用者不在終端機前，就很容易錯過並空等
-- **多個 session 分不清**：
-  - 同時開多個終端機或視窗跑 Claude 時，通知響了也不一定知道是哪個 session 需要處理
-- **需要反覆回頭確認**：
-  - 沒有主動提醒時，就得一直切回終端機確認是否已經跑完
+- **待處理的事件容易錯過**：
+  - Claude Code 結束回合、等待授權或需要輸入時，若使用者不在終端機前，可能無法及時處理
+- **多個 session 難以辨識**：
+  - 同時在多個終端機或視窗執行 Claude 時，需要從通知辨識待處理的 session
+- **執行狀態缺乏主動提醒**：
+  - 若沒有主動提醒，使用者需要反覆切回終端機確認執行狀態
 
 　
 
-## 這個 hook 做什麼（WHAT）
+## 功能範圍（WHAT）
 
 - **掛在 `Stop` 與 `Notification` 兩個事件**：
   - 回合結束，或出現需要你留意的通知（例如：工具授權、表單輸入或認證完成）時，發一則帶音效的 macOS 桌面通知
-- **看不到來源 session 時才提醒**：
+- **僅在來源 session 不可見時提醒**：
   - iTerm 可精準判斷 session；其他終端機則退回 App 層級判斷，點擊通知後會嘗試回到原本的視窗
 - **通知後端漸進式增強（Progressive Enhancement）**：
   - 優先使用 `Notifier.app`（自訂圖示），未建立時退回 `osascript`
@@ -38,7 +38,7 @@
 
 　
 
-## 如何使用這個 hook（HOW）
+## 使用方式（HOW）
 
 ### 安裝
 
@@ -59,7 +59,7 @@
   1. 打開 `~/.claude/settings.json`（沒有就新建）
   2. 在頂層 `hooks` 下，加入 `Stop` 與 `Notification`（matcher 為空字串 `""`）兩個事件
   3. 兩者的 `command` 都填 `~/.claude/hooks/sk-task-notifier/hook.sh`
-  4. 完整 JSON 見 repo 的 [`settings.hooks.json`](../../settings.hooks.json)，照抄或合併進去後存檔即生效
+  4. 完整 JSON 見 repo 的 [`settings.hooks.json`](../../settings.hooks.json)，依內容加入或合併後，存檔即會生效
 
 　
 

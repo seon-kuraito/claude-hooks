@@ -1,6 +1,6 @@
 # Claude Hooks
 
-個人維護的 Claude Code [Hooks](https://docs.claude.com/en/docs/claude-code/hooks)。這個 repo 保存實際檔案並負責版控，再透過 symlink 掛進 Claude Code 的執行環境。
+本 repo 用於維護個人使用的 Claude Code [Hooks](https://docs.claude.com/en/docs/claude-code/hooks)。實際檔案由 repo 進行版本控制，並透過 symlink 連結至 Claude Code 的執行環境。
 
 　
 
@@ -17,20 +17,20 @@
 
 ## 運作方式
 
-Hooks 和 skills 的接線方式不同：hooks 沒有探索目錄。每個 hook 都是在 `~/.claude/settings.json` 裡登記指令路徑，而路徑可以指向任何位置。本 repo 利用這一點，把 hook 腳本納入版控，同時避免直接管理那份經常變動的設定檔：
+Hooks 與 skills 的整合方式不同：hooks 沒有探索目錄，每個 hook 都需在 `~/.claude/settings.json` 中登記指令路徑，而該路徑可指向任意位置。本 repo 因此只將 hook 腳本納入版本控制，不直接管理經常變動的設定檔：
 
 ```
 ~/Developer/<owner>/claude-hooks/hooks/<name>/   ← 實際檔案（本 repo）
 ~/.claude/hooks/<name>                           ← symlink，逐一建立
 ```
 
-和 [claude-skills](https://github.com/seon-kuraito/claude-skills) 一樣，hook 會逐一連結到執行環境：`~/.claude/hooks/` 中官方或第三方直接安裝的 hooks 不會進入本 repo。`settings.json` 中的登記指向 `~/.claude/hooks/<hook-name>/hook.sh`，再透過 symlink 解析回本 repo。
+與 [claude-skills](https://github.com/seon-kuraito/claude-skills) 相同，各 hook 會分別連結至執行環境。直接安裝在 `~/.claude/hooks/` 的官方或第三方 hook 不會納入本 repo。`settings.json` 中的登記指向 `~/.claude/hooks/<hook-name>/hook.sh`，再由 symlink 解析至本 repo。
 
 　
 
 ### 為什麼不直接 symlink `settings.json`？
 
-`settings.json` 是執行階段狀態：切換 model、theme 或調整權限時，Claude Code 都可能改寫它。把它鏡射進公開 repo，等於把無關的機器狀態一起版控，也增加洩漏機密的風險。因此本 repo 採用「宣告與對照」（declare and compare）的做法：
+`settings.json` 屬於執行階段狀態；切換 model、theme 或調整權限時，Claude Code 都可能改寫該檔案。若將其鏡射至公開 repo，無關的本機狀態也會進入版本控制，並增加機密資訊外洩的風險。因此，本 repo 採用「宣告與對照」（declare and compare）的管理方式：
 
 - [`settings.hooks.json`](settings.hooks.json) 宣告 `hooks/` 中每個 hook 應如何登記，是 hook 註冊方式的參考來源
 - 實際的 `settings.json` 仍手動更新對齊；之後可再加入 check script 自動比對
@@ -47,7 +47,7 @@ scripts/link-hook.sh <hook-name>
 
 `<hook-name>` 是 `hooks/` 下的資料夾名稱（例如：`sk-task-notifier`）。
 
-腳本可重複執行：已連結的 hook 會略過，也不會覆蓋非自身管理的 symlink（例如：同名的第三方 hook）。若該 hook 自帶 `install.sh`，連結後會一併執行，用來處理可重複的 post-link 設定（例如：建置產物或檢查註冊）。
+腳本可重複執行：已連結的 hook 會跳過，也不會覆蓋非本 repo 管理的 symlink（例如：同名的第三方 hook）。若該 hook 附有 `install.sh`，連結後會一併執行，以處理可重複執行的 post-link 設定（例如：建置產物或檢查註冊）。
 
 　
 
